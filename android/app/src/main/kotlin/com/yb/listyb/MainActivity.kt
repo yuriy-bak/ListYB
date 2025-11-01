@@ -1,4 +1,4 @@
-package com.example.listyb
+package com.yb.listyb
 
 import io.flutter.embedding.android.FlutterActivity
 
