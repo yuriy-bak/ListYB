@@ -67,7 +67,7 @@ class _ListsScreenState extends State<ListsScreen> {
           if (lists.isEmpty) return const Center(child: Text('No lists yet'));
           return ListView.separated(
             itemCount: lists.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
+            separatorBuilder: (context, index) => const Divider(height: 1),
             itemBuilder: (context, i) {
               final name = lists[i];
               final id = name.toLowerCase().replaceAll(RegExp(r'\s+'), '-');

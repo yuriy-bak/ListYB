@@ -11,7 +11,7 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/',
       name: 'home',
-      builder: (_, __) => const ListsScreen(),
+      builder: (context, state) => const ListsScreen(),
       routes: [
         GoRoute(
           path: 'list/:id',
@@ -22,12 +22,12 @@ final GoRouter appRouter = GoRouter(
         GoRoute(
           path: 'settings',
           name: 'settings',
-          builder: (_, __) => const SettingsScreen(),
+          builder: (context, state) => const SettingsScreen(),
         ),
         GoRoute(
           path: 'about',
           name: 'about',
-          builder: (_, __) => const AboutScreen(),
+          builder: (context, state) => const AboutScreen(),
         ),
       ],
     ),
