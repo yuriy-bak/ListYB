@@ -45,3 +45,22 @@ R1:
   - dev: drift_dev, build_runner
 - Структура: lib/core/db/drift/{database.dart,tables/*.dart,daos/*.dart}
 - Функции: CRUD в ListDetails, фильтры, быстрые теги, локализация (ru/en/tr), переключатель темы.
+
+
+## Run on Android emulator / Deep links
+
+**Run:**
+```bash
+flutter emulators --launch <your_avd_name>
+flutter run -d <emulator_id>
+```
+
+**Check the deep link:**
+```bash
+adb shell am start -a android.intent.action.VIEW -d "listyb://app/list/demo" com.yb.listyb
+```
+
+> Требования: в `android/app/build.gradle` задано
+> `namespace "com.yb.listyb"` и `applicationId "com.yb.listyb"`.
+> В `AndroidManifest.xml` внутри `MainActivity` добавлен `<intent-filter>`
+> со схемой `listyb`, хостом `app` и `pathPrefix="/list"`.
