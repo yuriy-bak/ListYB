@@ -1,16 +1,47 @@
-# listyb
+# ListYB
 
-A new Flutter project.
+## Current Iteration Context (R1)
 
-## Getting Started
+### Short Context
+Context: ListYB R1 — Android local (без Isar)
+Repo: https://github.com/yuriy-bak/ListYB
+App: ListYB (package: com.yb.listyb), Deep links: listyb://
+minSdk: 26
 
-This project is a starting point for a Flutter application.
+Статус:
+- Архитектура, роутинг (go_router), темы (FlexColorScheme), экраны-заглушки.
+- Хранилище: In-memory репозиторий.
+- Freezed/json_serializable подключены.
+- Исключено: isar / isar_flutter_libs / isar_generator.
 
-A few resources to get you started if this is your first Flutter project:
+Проверка:
+- build_runner: flutter pub run build_runner build --delete-conflicting-outputs
+- запуск: flutter run
+- диплинк: adb shell am start -a android.intent.action.VIEW -d "listyb://app/list/demo" com.yb.listyb
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+---
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+### Detailed Context
+Project: ListYB
+Repo: https://github.com/yuriy-bak/ListYB
+Bundle/Id: com.yb.listyb
+Deep links: listyb://app, listyb://app/list/:id
+minSdk: 26
+Target: Android (приоритет), Desktop/Web — для отладки UI.
+
+R1:
+- Dependencies: go_router, flutter_riverpod, freezed_annotation, json_annotation, collection, intl, shared_preferences, url_launcher, flex_color_scheme, logger, package_info_plus, uni_links
+- Dev deps: build_runner, freezed, json_serializable
+- Архитектура папок: lib/app, lib/core/utils, lib/features/{lists,settings,about,import_export}, bootstrap.dart, main.dart
+- Роуты: '/', '/list/:id', '/settings', '/about', '/import'
+- AndroidManifest: intent-filter для listyb://app
+- Repo: InMemoryListsRepo с демо-данными (listId=demo)
+
+---
+
+### Plan R2
+- Drift/SQLite:
+  - runtime: drift, sqlite3, sqlite3_flutter_libs
+  - dev: drift_dev, build_runner
+- Структура: lib/core/db/drift/{database.dart,tables/*.dart,daos/*.dart}
+- Функции: CRUD в ListDetails, фильтры, быстрые теги, локализация (ru/en/tr), переключатель темы.
