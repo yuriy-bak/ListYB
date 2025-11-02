@@ -38,7 +38,9 @@ flutter run -d emulator-5554
 
 # После завершения этапа, коммитим:
 
-git switch feature/data-drift
+# git switch feature/data-drift
 git add .
+git commit -m "R1-01: Drift DB (v1) implementation"
+git push origin feature/data-drift
 
 ```
