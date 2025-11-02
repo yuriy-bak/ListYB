@@ -1,4 +1,5 @@
 # Miscellaneous
+.metadata
 *.class
 *.log
 *.pyc
@@ -43,3 +44,44 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+
+
+
+
+
+# Flutter/Dart
+.buildlog/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+build/
+# Do not version-control Flutter tool metadata
+.metadata
+
+# Android
+**/android/**/gradle-wrapper.jar
+**/.cxx/
+.gradle/
+local.properties
+*.jks
+**/android/captures/
+
+# iOS/macOS (на будущее, если включишь)
+**/ios/**/Pods/
+**/ios/**/DerivedData/
+**/ios/**/xcuserdata/
+
+# OS misc
+Thumbs.db
+
+# Flutter
+.dart_tool/
+.packages
+build/
+# Generated i18n
+lib/l10n/*.g.dart
+# Secrets
+*.keystore
+key.
