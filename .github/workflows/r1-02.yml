@@ -34,39 +34,7 @@ jobs:
       - name: Create feature branch
         run: |
           git switch -c feature/r1-02-repos-usecases
-          
-      - name: Apply hotfix (DAO imports, forTesting, DAO helpers)
-        shell: bash
-        run: |
-          set -euo pipefail
 
-          APP_DB="lib/data/db/app_database.dart"
-          LISTS_DAO="lib/data/db/daos/lists_dao.dart"
-          ITEMS_DAO="lib/data/db/daos/items_dao.dart"
-
-          # 1) app_database.dart — добавить импорты DAO ПЕРЕД 'part', затем добавить forTesting
-          if ! grep -q "daos/lists_dao.dart" "$APP_DB"; then
-            # Вставляем 2 импорта прямо перед первой строкой part 'app_database.g.dart';
-            perl -0777 -pe "s|part 'app_database.g.dart';|import 'daos/lists_dao.dart';\nimport 'daos/items_dao.dart';\n\npart 'app_database.g.dart';|;" -i "$APP_DB"
-          fi
-
-          # Добавляем именованный конструктор forTesting, если его нет
-          if ! grep -q "AppDatabase.forTesting" "$APP_DB"; then
-            perl -0777 -pe "s|(class AppDatabase extends _\\\$AppDatabase\\s*\\{\\s*AppDatabase\\(QueryExecutor e\\) : super\\(e\\);)|\\1\n  AppDatabase.forTesting\\(QueryExecutor e\\) : super\\(e\\);|s" -i "$APP_DB"
-          fi
-
-          # 2) lists_dao.dart — удобный метод createList(String)
-          if ! grep -q "Future<int> createList" "$LISTS_DAO"; then
-            perl -0777 -pe "s|(Future<int> insertList\\(ListsTableCompanion data\\) => into\\(listsTable\\)\\.insert\\(data\\);)|\\1\n\n  /// Convenience for tests\n  Future<int> createList\\(String title\\) {\\n    final now = DateTime.now\\(\\);\\n    return insertList\\(ListsTableCompanion.insert\\(\\n      title: title.trim\\(\\),\\n      archived: const Value\\(false\\),\\n      sortOrder: const Value\\(0\\),\\n      createdAt: now,\\n      updatedAt: now,\\n    \\)\\);\\n  }|s" -i "$LISTS_DAO"
-          fi
-
-          # 3) items_dao.dart — удобный метод createItem(...) с ИМЕНОВАННЫМИ параметрами
-          if ! grep -q "Future<int> createItem" "$ITEMS_DAO"; then
-            perl -0777 -pe "s|(Future<int> insertItem\\(ItemsTableCompanion data\\) => into\\(itemsTable\\)\\.insert\\(data\\);)|\\1\n\n  /// Convenience for tests\n  Future<int> createItem\\({required int listId, required String title, int position = 0}\\) {\\n    final now = DateTime.now\\(\\);\\n    return insertItem\\(ItemsTableCompanion.insert\\(\\n      listId: listId,\\n      title: title.trim\\(\\),\\n      isDone: const Value\\(false\\),\\n      position: Value\\(position\\),\\n      createdAt: now,\\n      updatedAt: now,\\n      completedAt: const Value\\(null\\),\\n    \\)\\);\\n  }|s" -i "$ITEMS_DAO"
-          fi
-
-          git add "$APP_DB" "$LISTS_DAO" "$ITEMS_DAO" || true
-          git commit -m "fix(r1-02): import DAOs in AppDatabase, add forTesting ctor, add DAO test helpers" || echo "Nothing to commit"
       - name: Apply hotfix (DAOs imports, forTesting ctor, createList())
         shell: bash
         run: |
