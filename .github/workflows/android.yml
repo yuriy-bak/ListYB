@@ -2,29 +2,54 @@ name: Android CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
   build-android:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
-          flutter-version: 'stable'
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          cache: true
+
       - name: Flutter pub get
         run: flutter pub get
+
+      - name: Format check
+        run: flutter format --set-exit-if-changed .
+
       - name: Analyze
         run: flutter analyze
+
       - name: Test
-        run: flutter test --no-pub
-      - name: Build APK (release)
-        run: flutter build apk --release
-      - name: Upload Artifact
+        run: flutter test --reporter=expanded
+
+      - name: Build APK (debug)
+        run: flutter build apk --debug
+
+      # Если есть подпись release, можно включить сборку релиза:
+      # - name: Build APK (release)
+      #   run: flutter build apk --release
+
+      - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: listyb-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
-``
+          name: android-apk
+          path: |
+            build/app/outputs/flutter-apk/app-debug.apk
+            # build/app/outputs/flutter-apk/app-release.apk
