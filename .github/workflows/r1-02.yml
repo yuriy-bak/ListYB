@@ -35,6 +35,98 @@ jobs:
         run: |
           git switch -c feature/r1-02-repos-usecases
 
+      - name: Apply hotfix (DAOs imports, forTesting ctor, createList())
+        shell: bash
+        run: |
+          set -euo pipefail
+      
+          # 1) app_database.dart — импорт DAO + конструктор forTesting
+          APP_DB="lib/data/db/app_database.dart"
+      
+          # Вставляем импорты DAO сразу после 'part' строки, если их нет
+          if ! grep -q "daos/lists_dao.dart" "$APP_DB"; then
+            awk '
+              /part '"'"'app_database.g.dart'"'"';/ && !p {
+                print $0;
+                print "";
+                print "// Drift DAOs imports (hotfix for generator visibility)";
+                print "import '\''daos/lists_dao.dart'\'';";
+                print "import '\''daos/items_dao.dart'\'';";
+                p=1; next
+              }
+              { print $0 }
+            ' "$APP_DB" > "$APP_DB.tmp" && mv "$APP_DB.tmp" "$APP_DB"
+          fi
+      
+          # Добавляем именованный конструктор forTesting, если его нет
+          if ! grep -q "AppDatabase.forTesting" "$APP_DB"; then
+            awk '
+              /class AppDatabase extends _\$AppDatabase/ { inClass=1 }
+              inClass && /AppDatabase\(QueryExecutor e\) : super\(e\);/ && !added {
+                print "  AppDatabase.forTesting(QueryExecutor e) : super(e);"
+                added=1
+              }
+              { print }
+            ' "$APP_DB" > "$APP_DB.tmp" && mv "$APP_DB.tmp" "$APP_DB"
+          fi
+      
+          # 2) lists_dao.dart — добавить createList(title)
+          LISTS_DAO="lib/data/db/daos/lists_dao.dart"
+          if ! grep -q "Future<int> createList" "$LISTS_DAO"; then
+            # Вставляем метод после insertList(...)
+            awk '
+              {print}
+              /Future<int> insertList\(ListsTableCompanion data\) => into\(listsTable\)\.insert\(data\);/ && !added {
+                print "";
+                print "  /// Convenience helper for tests: create a list with current timestamps.";
+                print "  Future<int> createList(String title) {";
+                print "    final now = DateTime.now();";
+                print "    return insertList(ListsTableCompanion.insert(";
+                print "      title: title.trim(),";
+                print "      archived: const Value(false),";
+                print "      sortOrder: const Value(0),";
+                print "      createdAt: now,";
+                print "      updatedAt: now,";
+                print "    ));";
+                print "  }";
+                print "";
+                added=1
+              }
+            ' "$LISTS_DAO" > "$LISTS_DAO.tmp" && mv "$LISTS_DAO.tmp" "$LISTS_DAO"
+          fi
+      
+          # 3) (опционально) items_dao.dart — быстрый хелпер createItem(...)
+          # Если понадобится — раскомментируйте блок ниже:
+          #
+          # ITEMS_DAO="lib/data/db/daos/items_dao.dart"
+          # if ! grep -q "Future<int> createItem" "$ITEMS_DAO"; then
+          #   awk '
+          #     {print}
+          #     /Future<int> insertItem\(ItemsTableCompanion data\) => into\(itemsTable\)\.insert\(data\);/ && !added {
+          #       print "";
+          #       print "  /// Convenience helper for tests: create an item with current timestamps.";
+          #       print "  Future<int> createItem(int listId, String title, {int position = 0}) {";
+          #       print "    final now = DateTime.now();";
+          #       print "    return insertItem(ItemsTableCompanion.insert(";
+          #       print "      listId: listId,";
+          #       print "      title: title.trim(),";
+          #       print "      isDone: const Value(false),";
+          #       print "      position: Value(position),";
+          #       print "      createdAt: now,";
+          #       print "      updatedAt: now,";
+          #       print "      completedAt: const Value(null),";
+          #       print "    ));";
+          #       print "  }";
+          #       print "";
+          #       added=1
+          #     }
+          #   ' "$ITEMS_DAO" > "$ITEMS_DAO.tmp" && mv "$ITEMS_DAO.tmp" "$ITEMS_DAO"
+          # fi
+      
+          # Зафиксируем изменения отдельным коммитом
+          git add lib/data/db/app_database.dart lib/data/db/daos/lists_dao.dart || true
+          git commit -m "fix: import DAOs in AppDatabase, add forTesting ctor, add ListsDao.createList()" || echo "Nothing to commit"
+          
       # ⬇️ СКРИПТ ДОБАВЛЕНИЯ ФАЙЛОВ (скелет домена/даты/тестов)
       # Мы кладём готовые файлы из «встроенного» здесь блока. Для компактности
       # добавляем их через bash heredoc. При желании можно разбить на множественные шаги.
