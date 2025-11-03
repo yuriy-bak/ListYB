@@ -53,7 +53,7 @@ void main() {
 
     await itemsDao.updateItem(id: b, title: 'Bananas (ripe)', note: '2kg');
     final updated = await itemsDao.getById(b);
-    expect(updated?.title, contains('ripe'));
+    expect(updated.title, contains('ripe'));
   });
 
   test('ItemsDao.reorder transactionally reindexes range', () async {

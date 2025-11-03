@@ -7,4 +7,9 @@
   - Миграции «вперёд» безопасны и быстры.
   - Никогда не блокировать UI — выполнять в изолированном изоляте/асинхронно.
   - Каждая миграция документируется и покрывается тестом.
+
+v2:
+- Added column `note` to `items_table` (nullable TEXT).
+  - Migration: m.addColumn(itemsTable, itemsTable.note)
+
 DOC
