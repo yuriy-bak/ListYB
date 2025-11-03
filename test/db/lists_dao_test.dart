@@ -47,7 +47,7 @@ void main() {
     final updOk = await listsDao.updateTitle(id2, 'Tools');
     expect(updOk, 1);
     final updated = await listsDao.getById(id2);
-    expect(updated?.title, 'Tools');
+    expect(updated.title, 'Tools');
 
     // delete list2 -> remains only archived list if we includeArchived
     final deleted = await listsDao.deleteList(id2);

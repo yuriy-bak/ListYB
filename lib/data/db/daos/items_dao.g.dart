@@ -4,6 +4,6 @@ part of 'items_dao.dart';
 
 // ignore_for_file: type=lint
 mixin _$ItemsDaoMixin on DatabaseAccessor<AppDatabase> {
-  $ListsTable get lists => attachedDatabase.lists;
-  $ItemsTable get items => attachedDatabase.items;
+  $ListsTableTable get listsTable => attachedDatabase.listsTable;
+  $ItemsTableTable get itemsTable => attachedDatabase.itemsTable;
 }

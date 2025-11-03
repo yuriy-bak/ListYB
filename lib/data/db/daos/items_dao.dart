@@ -1,97 +1,110 @@
 import 'package:drift/drift.dart';
-
 import '../app_database.dart';
 
 part 'items_dao.g.dart';
 
-@DriftAccessor(tables: [Items])
+@DriftAccessor(tables: [ItemsTable])
 class ItemsDao extends DatabaseAccessor<AppDatabase> with _$ItemsDaoMixin {
   ItemsDao(super.db);
 
+  Future<int> insertItem(ItemsTableCompanion data) =>
+      into(itemsTable).insert(data);
+
+  /// Convenience для тестов
   Future<int> createItem({
     required int listId,
     required String title,
+    int position = 0,
     String? note,
-    DateTime? dueAt,
-  }) async {
+  }) {
     final now = DateTime.now();
-    final maxPosExpr = items.position.max();
-    final maxRow =
-        await (selectOnly(items)
-              ..addColumns([maxPosExpr])
-              ..where(items.listId.equals(listId)))
-            .getSingleOrNull();
-
-    final currentMax = maxRow?.read(maxPosExpr) ?? 0;
-    final count = await countByList(listId);
-    final nextPos = count == 0 ? 0 : currentMax + 1;
-
-    return into(items).insert(
-      ItemsCompanion.insert(
+    return insertItem(
+      ItemsTableCompanion.insert(
         listId: listId,
-        title: title,
-        note: Value(note),
-        completed: const Value(false),
+        title: title.trim(),
+        isDone: const Value(false),
+        position: Value(position),
         createdAt: now,
-        dueAt: Value(dueAt),
-        position: Value(nextPos), // <= важно: Value<int>
+        updatedAt: now,
+        completedAt: const Value(null),
+        note: Value(note),
       ),
     );
   }
 
-  Future<ItemEntity?> getById(int id) {
-    return (select(items)..where((t) => t.id.equals(id))).getSingleOrNull();
-  }
+  Future<ItemsTableData> getById(int id) =>
+      (select(itemsTable)..where((t) => t.id.equals(id))).getSingle();
 
-  /// Возвращаем int (кол-во изменённых строк), т.к. используем write()
-  Future<int> updateItem({
+  Future<void> updateItemRaw(int id, ItemsTableCompanion data) =>
+      (update(itemsTable)..where((t) => t.id.equals(id))).write(data);
+
+  /// Обновление по именованным параметрам (под тесты)
+  Future<void> updateItem({
     required int id,
+    bool? completed,
     String? title,
     String? note,
-    DateTime? dueAt,
-    bool? completed,
-  }) {
-    final comp = ItemsCompanion(
-      title: title != null ? Value(title) : const Value.absent(),
-      note: note != null ? Value(note) : const Value.absent(),
-      dueAt: dueAt != null ? Value(dueAt) : const Value.absent(),
-      completed: completed != null ? Value(completed) : const Value.absent(),
+    int? position,
+  }) async {
+    final now = DateTime.now();
+    final companion = ItemsTableCompanion(
+      // изменяем только переданные поля
+      isDone: completed == null ? const Value.absent() : Value(completed),
+      title: title == null ? const Value.absent() : Value(title.trim()),
+      note: note == null ? const Value.absent() : Value(note),
+      position: position == null ? const Value.absent() : Value(position),
+      updatedAt: Value(now),
+      // completedAt ставим только если меняется completed
+      completedAt: completed == null
+          ? const Value.absent()
+          : Value(completed ? now : null),
     );
-    return (update(items)..where((t) => t.id.equals(id))).write(comp);
+    await (update(itemsTable)..where((t) => t.id.equals(id))).write(companion);
   }
 
-  Future<int> deleteItem(int id) {
-    return (delete(items)..where((t) => t.id.equals(id))).go();
-  }
+  Future<void> deleteItem(int id) =>
+      (delete(itemsTable)..where((t) => t.id.equals(id))).go();
 
-  Future<int> countByList(int listId) async {
-    final c = items.id.count();
-    final row =
-        await (selectOnly(items)
-              ..addColumns([c])
-              ..where(items.listId.equals(listId)))
-            .getSingle();
-    return row.read(c) ?? 0;
-  }
-
-  Stream<List<ItemEntity>> watchByList(
+  Stream<List<ItemsTableData>> watchByList(
     int listId, {
-    String? query,
-    bool? completed,
+    bool? completed, // true -> только выполненные, false -> только активные
+    String? query, // поиск по title/note, LIKE %query%
   }) {
-    final sel = select(items)
+    final q = (select(itemsTable)
       ..where((t) => t.listId.equals(listId))
-      ..orderBy([(t) => OrderingTerm.asc(t.position)]);
+      ..orderBy([
+        (t) => OrderingTerm.asc(t.position),
+        (t) => OrderingTerm.asc(t.id),
+      ]));
 
-    if (query != null && query.isNotEmpty) {
-      sel.where((t) => t.title.like('%$query%'));
-    }
     if (completed != null) {
-      sel.where((t) => t.completed.equals(completed));
+      q.where((t) => t.isDone.equals(completed));
     }
-    return sel.watch();
+
+    if (query != null && query.trim().isNotEmpty) {
+      final like = '%${query.trim()}%';
+      // Поиск по title ИЛИ note
+      q.where((t) => t.title.like(like) | t.note.like(like));
+    }
+
+    return q.watch();
   }
 
+  Stream<ItemsTableData?> watchOne(int id) =>
+      (select(itemsTable)..where((t) => t.id.equals(id))).watchSingleOrNull();
+
+  Future<void> reorderItems(int listId, List<int> orderedIds) async {
+    await transaction(() async {
+      for (var i = 0; i < orderedIds.length; i++) {
+        await (update(itemsTable)..where(
+              (t) => t.id.equals(orderedIds[i]) & t.listId.equals(listId),
+            ))
+            .write(ItemsTableCompanion(position: Value(i)));
+      }
+    });
+  }
+
+  /// Перемещает элемент с позиции oldIndex в позицию newIndex внутри списка
   Future<void> reorder({
     required int listId,
     required int oldIndex,
@@ -100,66 +113,31 @@ class ItemsDao extends DatabaseAccessor<AppDatabase> with _$ItemsDaoMixin {
     if (oldIndex == newIndex) return;
 
     await transaction(() async {
-      final moved =
-          await (select(items)..where(
-                (t) => t.listId.equals(listId) & t.position.equals(oldIndex),
-              ))
-              .getSingleOrNull();
+      // Текущий порядок
+      final rows =
+          await (select(itemsTable)
+                ..where((t) => t.listId.equals(listId))
+                ..orderBy([
+                  (t) => OrderingTerm.asc(t.position),
+                  (t) => OrderingTerm.asc(t.id),
+                ]))
+              .get();
 
-      if (moved == null) {
-        throw ArgumentError(
-          'Нет элемента с position=$oldIndex в listId=$listId',
+      if (rows.isEmpty) return;
+      if (oldIndex < 0 || oldIndex >= rows.length) return;
+      if (newIndex < 0 || newIndex >= rows.length) return;
+
+      final list = List<ItemsTableData>.from(rows);
+      final moved = list.removeAt(oldIndex);
+      list.insert(newIndex, moved);
+
+      // Переприсваиваем position
+      for (var i = 0; i < list.length; i++) {
+        final it = list[i];
+        await (update(itemsTable)..where((t) => t.id.equals(it.id))).write(
+          ItemsTableCompanion(position: Value(i)),
         );
       }
-
-      final maxPosExpr = items.position.max();
-      final maxRow =
-          await (selectOnly(items)
-                ..addColumns([maxPosExpr])
-                ..where(items.listId.equals(listId)))
-              .getSingleOrNull();
-      final maxPos = maxRow?.read(maxPosExpr) ?? 0;
-
-      if (newIndex < 0 || newIndex > maxPos) {
-        throw ArgumentError(
-          'newIndex=$newIndex вне диапазона [0..$maxPos] для listId=$listId',
-        );
-      }
-
-      // Временно убираем переносимый элемент
-      await (update(items)
-            ..where((t) => t.id.equals(moved.id) & t.listId.equals(listId)))
-          .write(const ItemsCompanion(position: Value(-1)));
-
-      if (newIndex > oldIndex) {
-        await customUpdate(
-          'UPDATE items '
-          'SET position = position - 1 '
-          'WHERE list_id = ? AND position > ? AND position <= ?',
-          variables: [
-            Variable.withInt(listId),
-            Variable.withInt(oldIndex),
-            Variable.withInt(newIndex),
-          ],
-          updates: {items},
-        );
-      } else {
-        await customUpdate(
-          'UPDATE items '
-          'SET position = position + 1 '
-          'WHERE list_id = ? AND position >= ? AND position < ?',
-          variables: [
-            Variable.withInt(listId),
-            Variable.withInt(newIndex),
-            Variable.withInt(oldIndex),
-          ],
-          updates: {items},
-        );
-      }
-
-      await (update(items)
-            ..where((t) => t.id.equals(moved.id) & t.listId.equals(listId)))
-          .write(ItemsCompanion(position: Value(newIndex)));
     });
   }
 }
