@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class ListDetailsScreen extends StatelessWidget {
-  final String listId;
+  final int listId;
   const ListDetailsScreen({super.key, required this.listId});
 
   @override
