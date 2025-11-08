@@ -1,6 +1,7 @@
 
 ```bash
 
+
 dart run build_runner build -d
 
 flutter analyze
@@ -16,10 +17,8 @@ flutter emulators --launch Pixel_9_API_31
 # После того как эмулятор запущен:
 flutter run
 
-# диплинки:
-adb shell am start -a android.intent.action.VIEW -d "listyb://list/123" com.yb.listyb
-adb shell am start -a android.intent.action.VIEW -d "listyb://list/123/add" com.yb.listyb
-adb shell am start -a android.intent.action.VIEW -d "listyb://item/456/edit" com.yb.listyb
+# диплинк:
+adb shell am start -a android.intent.action.VIEW -d "listyb://app/list/demo" com.yb.listyb
 
 ### Если несколько устройств
 # Посмотреть список:
