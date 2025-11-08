@@ -1,7 +1,7 @@
+import 'package:flutter/widgets.dart';
 import 'dart:async';
-import 'package:app_links/app_links.dart';
 import 'package:go_router/go_router.dart';
-
+import 'package:app_links/app_links.dart';
 import 'deeplink_parser.dart';
 
 /// Координатор диплинков: единая обработка cold + hot через `app_links`.
@@ -25,11 +25,12 @@ class DeepLinkCoordinator {
     );
 
     // Холодный старт (приложение запущено из диплинка)
-    // В актуальных версиях app_links используется getInitialLink().
-    // См. https://pub.dev/documentation/app_links/latest/app_links/AppLinks-class.html
+    // Обязательно навигируем ПОСЛЕ первого кадра, когда Router уже в дереве.
     final initial = await _appLinks.getInitialLink();
     if (initial != null) {
-      _handle(initial);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _handle(initial);
+      });
     }
   }
 
@@ -42,52 +43,33 @@ class DeepLinkCoordinator {
     final path = _mapUriToPath(uri);
     if (path == null) return;
 
-    // защита от повторной навигации одинаковым путём подряд
-    if (_lastPath == path) return;
+    if (_lastPath == path) return; // защита от дублей из плагина/интента
     _lastPath = path;
 
-    final current = _currentLocation();
-    if (current != path) {
-      router.go(path);
-    }
-  }
-
-  /// Текущая локация роутера (безопасно для разных версий go_router).
-  String _currentLocation() {
-    try {
-      return router.routerDelegate.currentConfiguration.uri.toString();
-    } catch (_) {
-      try {
-        // ignore: deprecated_member_use
-        return router.routeInformationProvider.value.location;
-      } catch (_) {
-        return '';
-      }
-    }
+    // Уходим в микрозадачу, чтобы не конфликтовать с callback’ами платформы.
+    Future.microtask(() => router.go(path));
   }
 
   /// Преобразование входящего `Uri` в путь `go_router`.
   ///
   /// Поддержка:
-  /// - `listyb://home` → `/`
+  /// - `listyb://home`     → `/`
   /// - `listyb://list/:id` → `/list/:id`
-  /// - `listyb://list/:id/add` → `/list/:id` (квик‑экран можно добавить позже)
+  /// - `listyb://list/:id/add` → `/list/:id` (квик-экран R1 открываем как список)
+  ///
+  /// И альтернативы с host=app.
   String? _mapUriToPath(Uri? uri) {
     if (uri == null) return null;
 
-    // Предпочтительно используем типобезопасный парсер команд
     final cmd = parseDeepLink(uri);
-    if (cmd != null) {
-      if (cmd is OpenListCmd) return '/list/${cmd.listId}';
-      if (cmd is QuickAddCmd) return '/list/${cmd.listId}';
-      // В R1 нет отдельного маршрута QuickEdit — игнорируем
-      return null;
-    }
+    if (cmd == null) return null;
 
-    // Back‑compat со старыми ссылками вида listyb://home
-    if (uri.scheme.toLowerCase() != 'listyb') return null;
-    final host = uri.host.toLowerCase();
-    if (host == 'home') return '/';
+    if (cmd is OpenHomeCmd) return '/';
+    if (cmd is OpenListCmd) return '/list/${cmd.listId}';
+    if (cmd is QuickAddCmd) return '/list/${cmd.listId}';
+    // В R1 нет отдельного маршрута QuickEdit — игнорируем
+    if (cmd is QuickEditCmd) return null;
+
     return null;
   }
 }
