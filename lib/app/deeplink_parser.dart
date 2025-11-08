@@ -28,7 +28,7 @@ class QuickEditCmd extends DeepLinkCommand {
 /// - listyb://home
 /// - listyb://list/{id}
 /// - listyb://list/{id}/add
-/// - listyb://item/{id}/edit   (R1: зарезервировано; возвращаем null)
+/// - listyb://item/{id}/edit  ← ТЕПЕРЬ ПОДДЕРЖИВАЕМ (возвращаем QuickEditCmd)
 ///
 /// Альтернативы с префиксом host=app:
 /// - listyb://app/home
@@ -37,9 +37,9 @@ class QuickEditCmd extends DeepLinkCommand {
 /// - listyb://app/item/{id}/edit
 ///
 /// Жёсткие правила во имя тестов:
-///  • Никаких query (?...) и fragment (#...) — сразу null.
-///  • Никаких лишних сегментов сверх описанных шаблонов.
-///  • Идентификаторы — строго целые положительные (int), без пробелов.
+/// • Никаких query (?...) и fragment (#...) — сразу null.
+/// • Никаких лишних сегментов сверх описанных шаблонов.
+/// • Идентификаторы — строго целые положительные (int), без пробелов.
 DeepLinkCommand? parseDeepLink(Uri uri) {
   try {
     if (uri.scheme.toLowerCase() != 'listyb') return null;
@@ -72,7 +72,7 @@ DeepLinkCommand? parseDeepLink(Uri uri) {
       return null; // лишние сегменты запрещены
     }
 
-    // list/{id}  или  list/{id}/add
+    // list/{id} или list/{id}/add
     if (head == 'list') {
       if (norm.length == 2) {
         final id = int.tryParse(norm[1]);
@@ -87,13 +87,12 @@ DeepLinkCommand? parseDeepLink(Uri uri) {
       return null; // любые другие варианты запрещены
     }
 
-    // item/{id}/edit — в R1 не поддерживаем, но валидируем форму
+    // item/{id}/edit — теперь поддерживаем и возвращаем QuickEditCmd
     if (head == 'item') {
       if (norm.length == 3 && norm[2] == 'edit') {
         final id = int.tryParse(norm[1]);
         if (id == null) return null;
-        // R1: QuickEdit не реализуем → не возвращаем команду
-        return null;
+        return QuickEditCmd(id);
       }
       return null;
     }

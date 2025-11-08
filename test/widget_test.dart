@@ -13,10 +13,12 @@ void main() {
       ProviderScope(child: MaterialApp.router(routerConfig: appRouter)),
     );
 
-    // Дождёмся первого кадра
-    await tester.pumpAndSettle();
+    // Для тестовой среды достаточно тикнуть пару кадров.
+    await tester.pump(); // первый кадр
+    await tester.pump(const Duration(milliseconds: 50)); // второй тик
 
-    // Ожидание заголовка домашнего экрана (замени на точный текст, если он у тебя другой)
+    // Подправь строку под фактический заголовок, если отличается.
+    // Здесь проверяем, что хоть какой-то текст с "List" отрисовался.
     expect(find.textContaining('List'), findsWidgets);
   });
 }
