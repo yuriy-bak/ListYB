@@ -28,26 +28,29 @@ class QuickEditCmd extends DeepLinkCommand {
 /// - listyb://home
 /// - listyb://list/{id}
 /// - listyb://list/{id}/add
-/// - listyb://item/{id}/edit
+/// - listyb://item/{id}/edit   (R1: зарезервировано; возвращаем null)
 ///
-/// И альтернативы с префиксом host=app:
+/// Альтернативы с префиксом host=app:
 /// - listyb://app/home
 /// - listyb://app/list/{id}
 /// - listyb://app/list/{id}/add
 /// - listyb://app/item/{id}/edit
 ///
-/// Важно: у кастомных схем первый «сегмент» пути часто оказывается в host.
-///
-/// Примеры:
-/// listyb://list/42    -> host: "list", pathSegments: ["42"]
-/// listyb://item/9/edit-> host: "item", pathSegments: ["9","edit"]
-/// listyb://app/list/7 -> host: "app",  pathSegments: ["list","7"]
+/// Жёсткие правила во имя тестов:
+///  • Никаких query (?...) и fragment (#...) — сразу null.
+///  • Никаких лишних сегментов сверх описанных шаблонов.
+///  • Идентификаторы — строго целые положительные (int), без пробелов.
 DeepLinkCommand? parseDeepLink(Uri uri) {
   try {
     if (uri.scheme.toLowerCase() != 'listyb') return null;
 
-    // Собираем логические сегменты с учётом host:
-    // [host?, ...pathSegments] и убираем пустые.
+    // Тесты требуют отбраковывать любые ссылки с query/fragment
+    if ((uri.hasQuery && uri.query.isNotEmpty) ||
+        (uri.hasFragment && uri.fragment.isNotEmpty)) {
+      return null;
+    }
+
+    // Логические сегменты: [host?, ...pathSegments] без пустых
     final segments = <String>[
       if (uri.host.isNotEmpty) uri.host,
       ...uri.pathSegments,
@@ -56,37 +59,41 @@ DeepLinkCommand? parseDeepLink(Uri uri) {
     if (segments.isEmpty) return null;
 
     // Нормализуем возможный префикс 'app'
-    // listyb://app/list/123 -> ["app","list","123"] => отбрасываем "app"
     final norm = segments.first == 'app' ? segments.sublist(1) : segments;
     if (norm.isEmpty) return null;
 
-    final head = norm[0];
+    String head = norm[0];
 
-    // home
+    // home — разрешаем ТОЛЬКО ровно один сегмент
     if (head == 'home') {
-      // Допускаем как ровно ["home"], так и c лишними хвостами, но игнорируем их
-      return const OpenHomeCmd();
+      if (norm.length == 1) {
+        return const OpenHomeCmd();
+      }
+      return null; // лишние сегменты запрещены
     }
 
-    // list/{id} [/add]
+    // list/{id}  или  list/{id}/add
     if (head == 'list') {
-      if (norm.length >= 2) {
+      if (norm.length == 2) {
         final id = int.tryParse(norm[1]);
         if (id == null) return null;
-        if (norm.length >= 3 && norm[2] == 'add') {
-          return QuickAddCmd(id);
-        }
         return OpenListCmd(id);
       }
-      return null;
-    }
-
-    // item/{id}/edit
-    if (head == 'item') {
-      if (norm.length >= 3 && norm[2] == 'edit') {
+      if (norm.length == 3 && norm[2] == 'add') {
         final id = int.tryParse(norm[1]);
         if (id == null) return null;
-        return QuickEditCmd(id);
+        return QuickAddCmd(id);
+      }
+      return null; // любые другие варианты запрещены
+    }
+
+    // item/{id}/edit — в R1 не поддерживаем, но валидируем форму
+    if (head == 'item') {
+      if (norm.length == 3 && norm[2] == 'edit') {
+        final id = int.tryParse(norm[1]);
+        if (id == null) return null;
+        // R1: QuickEdit не реализуем → не возвращаем команду
+        return null;
       }
       return null;
     }

@@ -1,10 +1,8 @@
 import 'package:go_router/go_router.dart';
-
 import '../features/lists/presentation/lists_screen.dart';
 import '../features/lists/presentation/list_details_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
 import '../features/about/presentation/about_screen.dart';
-
 // понадобятся команды парсера диплинков
 import 'deeplink_parser.dart';
 
@@ -40,7 +38,6 @@ final GoRouter appRouter = GoRouter(
   // Глобальная нормализация: если в go_router попал listyb://..., конвертируем.
   redirect: (context, state) {
     final uri = state.uri;
-
     // 1) Полные URI listyb://... → нормализуем
     if (uri.scheme == 'listyb') {
       final mapped = _mapListybToPath(uri);
@@ -48,18 +45,15 @@ final GoRouter appRouter = GoRouter(
       // Если нет — отправим на домашний, чтобы не ронять навигацию.
       return mapped ?? '/';
     }
-
     // 2) На всякий случай: если кто-то пришёл как /list/:id/add (без схемы),
-    //    тоже нормализуем до флага быстрого добавления.
+    // тоже нормализуем до флага быстрого добавления.
     final segs = uri.pathSegments;
     if (segs.length >= 3 && segs[0] == 'list' && segs[2] == 'add') {
       final id = int.tryParse(segs[1]);
       if (id != null) return '/list/$id?qa=1';
     }
-
     return null; // без изменений
   },
-
   routes: [
     GoRoute(
       path: '/',
@@ -72,14 +66,14 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) {
         final id = int.tryParse(state.pathParameters['id'] ?? '');
         if (id == null) return const ListsScreen();
-
         final quickAdd = _asBool(state.uri.queryParameters['qa']);
         final autoClose = _asBool(state.uri.queryParameters['autoclose']);
-
+        final isColdStart = _asBool(state.uri.queryParameters['cold']); // NEW
         return ListDetailsScreen(
           listId: id,
           quickAdd: quickAdd,
           autoCloseWhenDone: autoClose,
+          isColdStart: isColdStart, // NEW
         );
       },
     ),

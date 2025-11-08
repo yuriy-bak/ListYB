@@ -58,10 +58,41 @@
   - Для элемента: вернуть в список на прежнюю позицию
 - Реализация: хранить копию удалённого объекта в памяти до истечения таймера; при Undo — вставить обратно в БД транзакцией
 
+## Navigation
+- Навигация: `go_router` (MaterialApp.router).
+- Маршруты:
+  - `/` — Домой (списки).
+  - `/list/:id` — экран списка.
+  - `/settings` — настройки.
+  - `/about` — «О приложении».
+  - `/search` — опционально.
+- Нормализация путей:
+  - `listyb://home` → `/`
+  - `listyb://list/<id>` → `/list/<id>`
+  - `listyb://list/<id>/add` → `/list/<id>?qa=1`
+  - `/list/:id/add` → `/list/:id?qa=1` (если пришёл «сырой» путь без схемы).
+
 ## Deep Links
-- listyb://home → /
-- listyb://list/<id> → /list/:id
-- listyb://search?q=<query> → /search?q=... (опц.)
+
+- Схема: `listyb://`.
+- Поддерживаемые команды:
+  - `listyb://home` → Домой.
+  - `listyb://list/<id>` → экран списка `<id>`.
+  - `listyb://list/<id>/add` → QuickAdd (компактное добавление).
+  - `listyb://item/<id>/edit` — **не реализовано в R1** (резерв).
+- Обработка:
+  - **Cold start**: `DeepLinkCoordinator` (на базе `app_links`) выполняет `router.go(...)`, добавляет служебные флаги:
+    - `autoclose=1` для QuickAdd (авто‑закрытие после действия).
+    - `cold=1` для обычного открытия списка (для корректного Back).
+  - **Hot start**: выполняется `router.push(...)` без флага `cold`.
+- Правила Back:
+  - Обычная навигация — `pop()` по стеку, на корне — Домой.
+  - Горячий диплинк на список — Back ведёт на Домой.
+  - Холодный диплинк на список — Back **закрывает приложение**.
+  - QuickAdd (cold) — по завершении **закрываем приложение**; (hot) — возвращаемся назад.
+
+**Файлы:**
+ `lib/app/router.dart`, `lib/app/deeplinks.dart`, `lib/app/deeplink_parser.dart`, `lib/features/lists/presentation/list_details_screen.dart`, `android/app/src/main/AndroidManifest.xml`. 
 
 ## Testing & CI
 - Unit: repos/use-cases (CRUD, undo)

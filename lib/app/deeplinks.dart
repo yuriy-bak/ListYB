@@ -2,15 +2,12 @@ import 'package:flutter/widgets.dart';
 import 'dart:async';
 import 'package:go_router/go_router.dart';
 import 'package:app_links/app_links.dart';
-
 import 'deeplink_parser.dart';
 
-/// Координатор диплинков: cold → go, hot → push.
-/// QuickAdd помечаем query-параметрами: qa=1, а для cold — autoclose=1.
+/// Координатор диплинков: cold → go, hot → чтобы экран мог отличить холодный запуск от горячего./// Координатор диплинков: cold → go, hot → push.
 class DeepLinkCoordinator {
   DeepLinkCoordinator({required this.router, AppLinks? appLinks})
     : _appLinks = appLinks ?? AppLinks();
-
   final GoRouter router;
   final AppLinks _appLinks;
 
@@ -51,17 +48,22 @@ class DeepLinkCoordinator {
       path = _appendQuery(path, {'autoclose': '1'});
     }
 
+    // ВАЖНО: помечаем холодный старт флагом `cold=1` (только если его ещё нет).
+    if (!path.contains('cold=')) {
+      path = _appendQuery(path, {'cold': '1'});
+    }
+
     if (_shouldSkip(path)) return;
     Future.microtask(() => router.go(path!));
   }
 
   void _handleHot(Uri uri) {
     if (!_initialProcessed) return;
-
     final path = _mapUriToPath(uri);
     if (path == null) return;
-    if (_shouldSkip(path)) return;
 
+    // Для "горячего" диплинка флаг cold НЕ добавляем.
+    if (_shouldSkip(path)) return;
     Future.microtask(() => router.push(path));
   }
 
@@ -94,3 +96,6 @@ class DeepLinkCoordinator {
     return '$path$prefix$tail';
   }
 }
+
+/// QuickAdd помечаем query-параметрами: qa=1, а для cold — autoclose=1.
+/// Дополнительно для cold-start добавляем флаг `cold=1` (только для основного экрана),

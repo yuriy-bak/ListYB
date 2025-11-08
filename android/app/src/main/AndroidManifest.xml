@@ -41,6 +41,15 @@
                     android:scheme="listyb"
                     android:host="app"
                     android:path="/home" />
+                
+                <data
+                        android:scheme="listyb"
+                        android:host="list"
+                        android:pathPrefix="/" />
+                    <data
+                        android:scheme="listyb"
+                        android:host="home" />
+
             </intent-filter>
 
             <!-- Точка входа приложения -->

@@ -15,6 +15,7 @@ class ListDetailsScreen extends ConsumerStatefulWidget {
     required this.listId,
     this.quickAdd = false,
     this.autoCloseWhenDone = false,
+    this.isColdStart = false, // NEW
   });
 
   final int listId;
@@ -24,6 +25,10 @@ class ListDetailsScreen extends ConsumerStatefulWidget {
 
   /// Для cold-start QuickAdd: после действия закрыть приложение, если некуда вернуться.
   final bool autoCloseWhenDone;
+
+  /// Признак, что экран открыт холодным стартом (через диплинк)
+  /// и маршрут помечен ?cold=1.
+  final bool isColdStart; // NEW
 
   @override
   ConsumerState<ListDetailsScreen> createState() => _ListDetailsScreenState();
@@ -178,7 +183,7 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
       }
     }
 
-    // Закрываем сам экран, согласно ожиданию UX.
+    // Закрываем сам экран согласно ожиданию UX.
     await _finishQuickAdd();
   }
 
@@ -196,8 +201,6 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
 
     // Холодный диплинк QuickAdd: закрыть приложение, если явно указано
     if (widget.autoCloseWhenDone) {
-      // На некоторых прошивках лучше сначала уйти на корень,
-      // затем попросить систему закрыть Activity.
       context.go('/');
       await SystemNavigator.pop();
       return;
@@ -209,16 +212,25 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
 
   /// Единая логика системного Back:
   /// - если можем попнуть стек go_router — делаем pop()
-  /// - иначе идём на Домашний '/'
-  Future<bool> _handleSystemBack() async {
+  /// - если стек пуст и это холодный старт обычного списка — закрываем приложение
+  /// - иначе — идём на Домашний '/'
+  Future<void> _handleSystemBack() async {
     final router = GoRouter.of(context);
     if (router.canPop()) {
       context.pop();
-      return false; // сами обработали
+      return;
     }
-    // Если список открыт как корневой (горячий диплинк без хвоста) — уходим Домой
+
+    // Стек пуст.
+    // Для обычного "холодного" открытия списка — закрываем приложение.
+    // (QuickAdd имеет отдельную логику через autoCloseWhenDone)
+    if (widget.isColdStart && !widget.quickAdd) {
+      await SystemNavigator.pop();
+      return;
+    }
+
+    // Во всех остальных корневых случаях — на Домашний.
     context.go('/');
-    return false; // предотвращаем закрытие Activity
   }
 
   @override
@@ -237,7 +249,7 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
     return PopScope(
       // ВАЖНО: системный Back всегда идёт через нашу логику
       canPop: false,
-      onPopInvoked: (didPop) async {
+      onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return; // если кто-то уже попнул — выходим
         await _handleSystemBack();
       },
