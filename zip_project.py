@@ -85,7 +85,7 @@ def main():
         zip_name += ".zip"
 
     out_zip = os.path.abspath(os.path.join(out_dir_abs, zip_name))
-    out_pdf = os.path.abspath(os.path.splitext(out_zip)[0] + ".pdf")  # «двойник» с .pdf
+    out_pdf = os.path.abspath(out_zip + ".pdf")  # «двойник» с .pdf
 
     # Исключим итоговые файлы (и .zip, и .pdf) из списка, если их относительные пути внезапно попадут
     rel_zip = os.path.relpath(out_zip, repo_root).replace("\\", "/")

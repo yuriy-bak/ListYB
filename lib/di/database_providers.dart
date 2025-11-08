@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 
@@ -16,7 +15,7 @@ import 'package:listyb/data/db/daos/lists_dao.dart';
 LazyDatabase _openConnection({String fileName = 'listyb.db'}) {
   return LazyDatabase(() async {
     final dir = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dir.path, fileName));
+    final file = File('${dir.path}/$fileName');
     return NativeDatabase.createInBackground(file);
   });
 }

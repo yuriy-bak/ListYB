@@ -5,8 +5,7 @@ import '../features/lists/presentation/list_details_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
 import '../features/about/presentation/about_screen.dart';
 
-/// Оставляю фабрику для совместимости с твоим main.dart,
-/// где вызывается `createAppRouter()`.
+/// Для совместимости с твоим main.dart оставляю фабрику.
 GoRouter createAppRouter() => appRouter;
 
 final GoRouter appRouter = GoRouter(
@@ -22,9 +21,8 @@ final GoRouter appRouter = GoRouter(
       name: 'list',
       builder: (context, state) {
         final idStr = state.pathParameters['id'] ?? '';
-        // Т.к. экран ожидает int — парсим. Невалидное -> 0 (или можно показать ошибку).
-        final id = int.tryParse(idStr) ?? 0;
-        return ListDetailsScreen(listId: id);
+        // Экран ожидает строковый listId — пробрасываем как есть.
+        return ListDetailsScreen(listId: idStr);
       },
     ),
     GoRoute(
