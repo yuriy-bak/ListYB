@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../data/db/app_database.dart';
-import '../../../data/db/db_provider.dart';
+import 'package:listyb/data/db/app_database.dart';
+import 'package:listyb/di/database_providers.dart';
 
 /// Параметризованный провайдер: наблюдаем одиночный список по id.
 final watchListUcProvider = StreamProvider.family<ListsTableData?, int>((

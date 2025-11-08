@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../di/stream_providers.dart';
-import '../../../di/usecase_providers.dart';
-import '../../../domain/entities/yb_list.dart';
-import '../../../domain/entities/yb_counts.dart';
+import 'package:listyb/di/stream_providers.dart';
+import 'package:listyb/di/usecase_providers.dart';
+import 'package:listyb/domain/entities/yb_list.dart';
+import 'package:listyb/domain/entities/yb_counts.dart';
 
 class ListsScreen extends ConsumerWidget {
   const ListsScreen({super.key});
