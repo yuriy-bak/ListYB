@@ -3,11 +3,11 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:listyb/data/db/app_database.dart';
 import 'package:listyb/di/database_providers.dart';
-import 'package:listyb/features/lists/application/watch_list_uc_provider.dart';
 import 'package:listyb/features/lists/application/items_filter.dart';
-import 'package:go_router/go_router.dart';
+import 'package:listyb/features/lists/application/watch_list_uc_provider.dart';
 
 class ListDetailsScreen extends ConsumerStatefulWidget {
   const ListDetailsScreen({
@@ -19,7 +19,7 @@ class ListDetailsScreen extends ConsumerStatefulWidget {
 
   final int listId;
 
-  /// Быстрый режим добавления (из диплинка /list/:id/add)
+  /// Быстрый режим добавления (из диплинка /list/:id?qa=1).
   final bool quickAdd;
 
   /// Для cold-start QuickAdd: после действия закрыть приложение, если некуда вернуться.
@@ -42,7 +42,6 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
     super.initState();
     _searchController.addListener(_onSearchChanged);
 
-    // Если пришли по диплинку QuickAdd — сразу открываем компактный диалог.
     if (widget.quickAdd) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -83,7 +82,7 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Элемент добавлен')));
-    } on Exception {
+    } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -124,8 +123,9 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
         },
       ),
     );
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(snack);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(snack);
   }
 
   /// Открывает компактный диалог «Быстро добавить…».
@@ -135,7 +135,7 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
     final result = await showDialog<String>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Быстро добавить'),
         content: TextField(
           controller: controller,
@@ -144,15 +144,16 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
             hintText: 'Название элемента',
             isDense: true,
           ),
-          onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
+          onSubmitted: (v) => Navigator.of(dialogContext).pop(v.trim()),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(null),
+            onPressed: () => Navigator.of(dialogContext).pop(null),
             child: const Text('Отмена'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(controller.text.trim()),
             child: const Text('Добавить'),
           ),
         ],
@@ -177,36 +178,47 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
       }
     }
 
-    // Закрываем сам экран, т.к. это QuickAdd-вызов.
-    _finishQuickAdd();
+    // Закрываем сам экран, согласно ожиданию UX.
+    await _finishQuickAdd();
   }
 
-  /// Закрывает текущий экран (и при необходимости приложение).
+  /// Закрывает текущий экран (и при необходимости приложение) для QuickAdd.
   Future<void> _finishQuickAdd() async {
     if (!mounted) return;
 
-    // Если есть куда вернуться — просто попнем текущий маршрут.
-    if (Navigator.of(context).canPop()) {
-      Navigator.of(context).pop();
+    final router = GoRouter.of(context);
+
+    if (router.canPop()) {
+      // Горячий диплинк: вернёмся на предыдущий экран
+      context.pop();
       return;
     }
 
-    // Если это cold-start QuickAdd и некуда попать — закрываем приложение.
+    // Холодный диплинк QuickAdd: закрыть приложение, если явно указано
     if (widget.autoCloseWhenDone) {
+      // На некоторых прошивках лучше сначала уйти на корень,
+      // затем попросить систему закрыть Activity.
+      context.go('/');
       await SystemNavigator.pop();
+      return;
     }
+
+    // Если это не QuickAdd‑cold и попать некуда — вернёмся Домой
+    context.go('/');
   }
 
-  /// Локальная логика системной кнопки «Назад»:
-  /// если экран открыт как корневой (некуда попать) — идём на домашний '/',
-  /// иначе — обычный pop().
+  /// Единая логика системного Back:
+  /// - если можем попнуть стек go_router — делаем pop()
+  /// - иначе идём на Домашний '/'
   Future<bool> _handleSystemBack() async {
-    // В go_router есть extension: context.canPop(), но проверим более совместимо.
-    final canPop = Navigator.of(context).canPop();
-    if (canPop) return true;
-    if (!mounted) return false;
-    context.go('/'); // подменяем закрытие приложения на переход «домой»
-    return false; // самим pop не выполняем
+    final router = GoRouter.of(context);
+    if (router.canPop()) {
+      context.pop();
+      return false; // сами обработали
+    }
+    // Если список открыт как корневой (горячий диплинк без хвоста) — уходим Домой
+    context.go('/');
+    return false; // предотвращаем закрытие Activity
   }
 
   @override
@@ -223,10 +235,10 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
     );
 
     return PopScope(
-      canPop: true,
+      // ВАЖНО: системный Back всегда идёт через нашу логику
+      canPop: false,
       onPopInvoked: (didPop) async {
-        // Если уже попнули — ничего не делаем. Если нет — пробуем наша логика.
-        if (didPop) return;
+        if (didPop) return; // если кто-то уже попнул — выходим
         await _handleSystemBack();
       },
       child: Scaffold(
@@ -248,7 +260,7 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
         ),
         body: Column(
           children: [
-            // Быстрое добавление (обычный режим)
+            // Быстрое добавление
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
               child: Row(
@@ -289,7 +301,7 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
               ),
             ),
 
-            // Поисковая строка
+            // Поиск
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
               child: TextField(
@@ -308,7 +320,7 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
             ),
             const SizedBox(height: 8),
 
-            // Список элементов
+            // Список
             Expanded(
               child: itemsAsync.when(
                 data: (items) {
@@ -337,9 +349,8 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
                           child: const Icon(Icons.delete, color: Colors.red),
                         ),
                         confirmDismiss: (_) async {
-                          // удаляем вручную + показываем Undo
                           await _delete(it);
-                          return false; // Dismissible не удаляет повторно
+                          return false;
                         },
                         child: CheckboxListTile(
                           value: it.isDone,
@@ -374,7 +385,7 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
 
   Future<void> showSearchBar(BuildContext context) async {
     await Future<void>.delayed(Duration.zero);
-    if (!context.mounted) return; // важно: проверяем контекст
+    if (!context.mounted) return;
     FocusScope.of(context).requestFocus(_focus);
     await SystemChannels.textInput.invokeMethod('TextInput.show');
   }
