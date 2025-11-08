@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:listyb/data/db/app_database.dart';
 import 'package:listyb/di/database_providers.dart';
 import 'package:listyb/features/lists/application/watch_list_uc_provider.dart';
+import 'package:listyb/features/lists/application/items_filter.dart';
 
 class ListDetailsScreen extends ConsumerStatefulWidget {
   const ListDetailsScreen({super.key, required this.listId});
