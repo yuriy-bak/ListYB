@@ -17,17 +17,21 @@ flutter emulators --launch Pixel_9_API_31
 # После того как эмулятор запущен:
 flutter run
 
-# диплинк:
-adb shell am start -a android.intent.action.VIEW -d "listyb://app/list/demo" com.yb.listyb
-
 ### Если несколько устройств
 # Посмотреть список:
 flutter devices
 
 # Запустить на конкретном:
 flutter run -d emulator-5554
-
 # (`emulator-5554` — это ID из списка `flutter devices`).
+
+# Проверка диплинков:
+
+adb shell am start -a android.intent.action.VIEW -d "listyb://home" com.yb.listyb
+adb shell am start -a android.intent.action.VIEW -d "listyb://list/1" com.yb.listyb
+adb shell am start -a android.intent.action.VIEW -d "listyb://list/1/add" com.yb.listyb
+# Альтернатива:
+adb shell am start -a android.intent.action.VIEW -d "listyb://app/list/1" com.yb.listyb
 
 ---
 

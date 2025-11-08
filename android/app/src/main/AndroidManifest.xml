@@ -20,14 +20,36 @@
             android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode">
 
-            <!-- Deep link: listyb://... -->
-            <intent-filter>
+            
+        <!-- Deep link: listyb://... -->
+            <intent-filter android:autoVerify="false">
                 <action android:name="android.intent.action.VIEW" />
-
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
 
+                <!-- Базовая схема -->
                 <data android:scheme="listyb" />
+
+                <!-- Наиболее часто используемый хост + путь под списки -->
+                <data
+                    android:scheme="listyb"
+                    android:host="app"
+                    android:pathPrefix="/list" />
+
+                <!-- (опционально) домашняя -->
+                <data
+                    android:scheme="listyb"
+                    android:host="app"
+                    android:path="/home" />
+                
+                <data
+                        android:scheme="listyb"
+                        android:host="list"
+                        android:pathPrefix="/" />
+                    <data
+                        android:scheme="listyb"
+                        android:host="home" />
+
             </intent-filter>
 
             <!-- Точка входа приложения -->
@@ -35,6 +57,7 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+
         </activity>
 
     </application>

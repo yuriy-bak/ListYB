@@ -1,17 +1,40 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'router.dart';
+import 'theme.dart';
+import 'deeplinks.dart';
 
-/// Корневой виджет приложения.
-/// Здесь важно: в createAppRouter передаём `ref.read`, а не сам `ref`,
-/// потому что сигнатура ожидает ReaderFn (typedef в router.dart).
-class App extends ConsumerWidget {
+class App extends StatefulWidget {
   const App({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final router = createAppRouter(ref.read);
-    return MaterialApp.router(title: 'ListYB', routerConfig: router);
+  State<App> createState() => _AppState();
+}
+
+class _AppState extends State<App> {
+  late final DeepLinkCoordinator _deeplinks = DeepLinkCoordinator(
+    router: appRouter,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _deeplinks.init();
+  }
+
+  @override
+  void dispose() {
+    _deeplinks.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp.router(
+      title: 'ListYB',
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      routerConfig: appRouter,
+    );
   }
 }
