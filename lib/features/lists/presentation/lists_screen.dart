@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-
 import 'package:listyb/di/stream_providers.dart';
 import 'package:listyb/di/usecase_providers.dart';
 import 'package:listyb/domain/entities/yb_list.dart';
@@ -9,11 +8,9 @@ import 'package:listyb/domain/entities/yb_counts.dart';
 
 class ListsScreen extends ConsumerWidget {
   const ListsScreen({super.key});
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final listsAsync = ref.watch(listsStreamProvider);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('ListYB — Lists'),
@@ -42,7 +39,7 @@ class ListsScreen extends ConsumerWidget {
           }
           return ListView.separated(
             itemCount: lists.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
+            separatorBuilder: (context, _) => const Divider(height: 1),
             itemBuilder: (context, i) {
               final list = lists[i];
               return _ListTile(list: list);
@@ -60,7 +57,6 @@ class ListsScreen extends ConsumerWidget {
   Future<void> _createListDialog(BuildContext context, WidgetRef ref) async {
     final controller = TextEditingController();
     final createList = ref.read(createListUcProvider);
-
     final name = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -83,14 +79,12 @@ class ListsScreen extends ConsumerWidget {
         ],
       ),
     );
-
     if (name == null || name.trim().isEmpty) return;
 
     try {
       final listId = await createList(name.trim());
-      if (context.mounted) {
-        context.push('/list/$listId');
-      }
+      if (!context.mounted) return;
+      context.push('/list/$listId');
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(
@@ -103,16 +97,14 @@ class ListsScreen extends ConsumerWidget {
 class _ListTile extends ConsumerWidget {
   const _ListTile({required this.list});
   final YbList list;
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final countsAsync = ref.watch(countsByListProvider(list.id));
-
     return ListTile(
       title: Text(list.title),
       subtitle: countsAsync.when(
         loading: () => const Text('Загрузка…'),
-        error: (_, __) => const Text('—'),
+        error: (error, stackTrace) => const Text('—'),
         data: (YbCounts c) => Text('Открытые: ${c.active} / Всего: ${c.total}'),
       ),
       trailing: const Icon(Icons.chevron_right),
@@ -156,7 +148,6 @@ class _ListTile extends ConsumerWidget {
         ),
       ),
     );
-
     if (!context.mounted || action == null) return;
 
     try {
@@ -185,13 +176,16 @@ class _ListTile extends ConsumerWidget {
               ],
             ),
           );
+          if (!context.mounted) return;
           if (newName != null && newName.isNotEmpty) {
             await rename(list.id, newName);
           }
           break;
+
         case 'archive':
           await archive(list.id, archived: !list.archived);
           break;
+
         case 'delete':
           final confirm = await showDialog<bool>(
             context: context,
@@ -212,12 +206,14 @@ class _ListTile extends ConsumerWidget {
               ],
             ),
           );
+          if (!context.mounted) return;
           if (confirm == true) {
             await remove(list.id);
           }
           break;
       }
     } catch (e) {
+      if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Операция не выполнена: $e')));
@@ -227,7 +223,6 @@ class _ListTile extends ConsumerWidget {
 
 class _EmptyState extends StatelessWidget {
   const _EmptyState();
-
   @override
   Widget build(BuildContext context) {
     return const Center(child: Text('Пока нет списков.\nСоздайте первый.'));
