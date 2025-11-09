@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 
 import 'package:go_router/go_router.dart';
 
@@ -170,16 +171,61 @@ class _ListView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
     return ListView.builder(
       itemCount: lists.length,
       itemBuilder: (context, index) {
         final list = lists[index];
         final counts = countsMap[list.id];
-        return ListCard(
+
+        Widget card = ListCard(
           list: list,
           counts: counts,
           onTap: () => GoRouter.of(context).go('/list/${list.id}'),
           onLongPressAt: (pos) => _onLongPressAt(context, ref, list, pos),
+        );
+
+        return Dismissible(
+          key: ValueKey('list_${list.id}'),
+          direction: DismissDirection.horizontal,
+          background: _SwipeBackground(
+            alignment: Alignment.centerLeft,
+            color: scheme.errorContainer,
+            icon: Icons.delete_outline,
+            iconColor: scheme.onErrorContainer,
+            label: L10n.t(context, 'common.delete'),
+            labelColor: scheme.onErrorContainer,
+          ),
+          secondaryBackground: _SwipeBackground(
+            alignment: Alignment.centerRight,
+            color: scheme.primaryContainer,
+            icon: Icons.edit_outlined,
+            iconColor: scheme.onPrimaryContainer,
+            label: L10n.t(context, 'common.edit'),
+            labelColor: scheme.onPrimaryContainer,
+          ),
+          confirmDismiss: (direction) async {
+            if (direction == DismissDirection.startToEnd) {
+              HapticFeedback.lightImpact();
+              final confirmed = await _confirmDeleteWithAutoYes(
+                context,
+                showCountdownOnButton: true,
+              );
+              if (confirmed == true) {
+                if (!context.mounted) return false;
+                final undo = ref.read(undoServiceProvider);
+                await undo.deleteWithUndo(context: context, listId: list.id);
+                return true; // позволим анимацию удаления
+              }
+              return false;
+            } else if (direction == DismissDirection.endToStart) {
+              HapticFeedback.lightImpact();
+              await _rename(context, ref, list);
+              return false; // переименование без удаления карточки
+            }
+            return false;
+          },
+          child: card,
         );
       },
     );
@@ -246,7 +292,10 @@ class _ListView extends ConsumerWidget {
   }
 
   Future<void> _delete(BuildContext context, WidgetRef ref, YbList list) async {
-    final confirm = await _confirmDeleteWithAutoYes(context);
+    final confirm = await _confirmDeleteWithAutoYes(
+      context,
+      showCountdownOnButton: true,
+    );
     if (confirm != true) return;
     if (!context.mounted) return;
 
@@ -257,53 +306,125 @@ class _ListView extends ConsumerWidget {
   /// Диалог подтверждения удаления:
   /// - Кнопка по умолчанию "Да" (autofocus).
   /// - Авто-подтверждение через 5 сек, если нет действий.
+  /// - Показывает обратный отсчет на кнопке, если showCountdownOnButton=true.
   /// - Возвращает true/false.
-  Future<bool?> _confirmDeleteWithAutoYes(BuildContext context) async {
+  Future<bool?> _confirmDeleteWithAutoYes(
+    BuildContext context, {
+    bool showCountdownOnButton = false,
+  }) async {
     final completer = Completer<bool?>();
     final navigator = Navigator.of(context);
 
-    Timer? timer;
+    Timer? autoTimer;
+    Timer? uiTimer;
+    int secondsLeft = 5;
     bool decided = false;
+
+    void cleanupTimers() {
+      autoTimer?.cancel();
+      uiTimer?.cancel();
+    }
 
     void decide(bool result) {
       if (decided) return;
       decided = true;
-      timer?.cancel();
+      cleanupTimers();
       if (!completer.isCompleted) completer.complete(result);
       if (navigator.canPop()) navigator.pop(result);
     }
 
-    timer = Timer(const Duration(seconds: 5), () {
+    autoTimer = Timer(const Duration(seconds: 5), () {
       decide(true); // авто "Да"
     });
 
-    // Показ диалога
-    showDialog<bool>(
+    return showDialog<bool>(
       context: context,
       barrierDismissible: true,
       builder: (ctx) {
-        return AlertDialog(
-          title: Text(L10n.t(ctx, 'list.delete')),
-          content: Text(L10n.t(ctx, 'snackbar.list_deleted')),
-          actions: [
-            TextButton(
-              onPressed: () => decide(false),
-              child: Text(L10n.t(ctx, 'common.cancel')),
-            ),
-            TextButton(
-              autofocus: true, // кнопка по умолчанию
-              onPressed: () => decide(true),
-              child: Text(L10n.t(ctx, 'common.delete')),
-            ),
-          ],
+        return StatefulBuilder(
+          builder: (ctx, setState) {
+            // UI-таймер только для обновления подписи
+            uiTimer ??= (showCountdownOnButton)
+                ? Timer.periodic(const Duration(seconds: 1), (t) {
+                    if (secondsLeft > 1) {
+                      secondsLeft -= 1;
+                      setState(() {});
+                    } else {
+                      t.cancel();
+                    }
+                  })
+                : null;
+
+            final deleteLabelBase = L10n.t(ctx, 'common.delete');
+            final deleteLabel = showCountdownOnButton
+                ? '$deleteLabelBase ($secondsLeft)'
+                : deleteLabelBase;
+
+            return AlertDialog(
+              title: Text(L10n.t(ctx, 'list.delete')),
+              content: Text(L10n.t(ctx, 'snackbar.list_deleted')),
+              actions: [
+                TextButton(
+                  onPressed: () => decide(false),
+                  child: Text(L10n.t(ctx, 'common.cancel')),
+                ),
+                TextButton(
+                  autofocus: true, // кнопка по умолчанию
+                  onPressed: () => decide(true),
+                  child: Text(deleteLabel),
+                ),
+              ],
+            );
+          },
         );
       },
     ).then((value) {
-      // Если диалог закрыли через barrier/back — решает таймер,
+      // Если диалог закрыли через barrier/back — решит автотаймер,
       // либо сюда прилетит значение. В обеих случаях решает decide().
       if (!decided && value != null) decide(value);
+      cleanupTimers();
+      return completer.future;
     });
+  }
+}
 
-    return completer.future;
+class _SwipeBackground extends StatelessWidget {
+  const _SwipeBackground({
+    required this.alignment,
+    required this.color,
+    required this.icon,
+    required this.iconColor,
+    required this.label,
+    required this.labelColor,
+  });
+
+  final Alignment alignment;
+  final Color color;
+  final IconData icon;
+  final Color iconColor;
+  final String label;
+  final Color labelColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: color,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      alignment: alignment,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: iconColor),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: labelColor,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
