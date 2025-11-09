@@ -9,9 +9,11 @@ import sys
 import zipfile
 import shutil
 
+
 def fail(msg: str, code: int = 1):
     print(f"[ERROR] {msg}", file=sys.stderr)
     sys.exit(code)
+
 
 def get_repo_root() -> str | None:
     try:
@@ -24,6 +26,7 @@ def get_repo_root() -> str | None:
         return out if out else None
     except Exception:
         return None
+
 
 def get_included_files(repo_root: str) -> list[str]:
     """
@@ -41,18 +44,23 @@ def get_included_files(repo_root: str) -> list[str]:
         fail("Не найден 'git' в PATH. Установи Git или добавь его в PATH.")
     except subprocess.CalledProcessError as e:
         stderr = (e.stderr or b"").decode(errors="ignore").strip()
-        fail(f"Не удалось получить список файлов через git ls-files: {stderr or e}")
+        fail(
+            f"Не удалось получить список файлов через git ls-files: {stderr or e}")
 
     raw = proc.stdout or b""
-    items = [p.decode("utf-8", "surrogateescape") for p in raw.split(b"\x00") if p]
+    items = [p.decode("utf-8", "surrogateescape")
+             for p in raw.split(b"\x00") if p]
     # На всякий случай убираем всё под .git/ на любой глубине
-    filtered = [p for p in items if "/.git/" not in p and not p.startswith(".git/")]
+    filtered = [
+        p for p in items if "/.git/" not in p and not p.startswith(".git/")]
     return filtered
+
 
 def default_zip_name(repo_root: str) -> str:
     folder = os.path.basename(os.path.normpath(repo_root))
     ts = dt.datetime.now().strftime("%Y%m%d-%H%M")
     return f"{folder}-{ts}.zip"
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -85,15 +93,15 @@ def main():
         zip_name += ".zip"
 
     out_zip = os.path.abspath(os.path.join(out_dir_abs, zip_name))
-    out_pdf = os.path.abspath(out_zip + ".pdf")  # «двойник» с .pdf
+    out_tsv = os.path.abspath(os.path.join(out_dir_abs, "_project.tsv"))  # «двойник» с .tsv
 
-    # Исключим итоговые файлы (и .zip, и .pdf) из списка, если их относительные пути внезапно попадут
+    # Исключим итоговые файлы (и .zip, и .tsv) из списка, если их относительные пути внезапно попадут
     rel_zip = os.path.relpath(out_zip, repo_root).replace("\\", "/")
-    rel_pdf = os.path.relpath(out_pdf, repo_root).replace("\\", "/")
-    files = [f for f in files if f != rel_zip and f != rel_pdf]
+    rel_tsv = os.path.relpath(out_tsv, repo_root).replace("\\", "/")
+    files = [f for f in files if f != rel_zip and f != rel_tsv]
 
     # Чистим старые файлы, если уже есть
-    for path in (out_zip, out_pdf):
+    for path in (out_zip, out_tsv):
         if os.path.exists(path):
             try:
                 os.remove(path)
@@ -113,12 +121,12 @@ def main():
     except Exception as e:
         fail(f"Ошибка при создании ZIP: {e}")
 
-    # Создаём «двойник» с расширением .pdf (байт-в-байт копия ZIP)
+    # Создаём «двойник» с расширением .tsv (байт-в-байт копия ZIP)
     try:
-        shutil.copyfile(out_zip, out_pdf)
-        print(f"[OK] PDF-копия создана: {out_pdf}")
+        shutil.copyfile(out_zip, out_tsv)
+        print(f"[OK] tsv-копия создана: {out_tsv}")
     except Exception as e:
-        fail(f"Не удалось создать PDF-копию: {e}")
+        fail(f"Не удалось создать tsv-копию: {e}")
 
     # Открыть папку с архивами (по желанию)
     if args.open_folder and os.name == "nt":
@@ -126,6 +134,7 @@ def main():
             os.startfile(out_dir_abs)  # только Windows
         except Exception:
             pass
+
 
 if __name__ == "__main__":
     main()
