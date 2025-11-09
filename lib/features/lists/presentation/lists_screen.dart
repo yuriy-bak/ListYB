@@ -1,230 +1,309 @@
+// lib/features/lists/presentation/lists_screen.dart
+
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'package:go_router/go_router.dart';
-import 'package:listyb/di/stream_providers.dart';
-import 'package:listyb/di/usecase_providers.dart';
+
+import 'package:listyb/l10n/l10n_stub.dart';
 import 'package:listyb/domain/entities/yb_list.dart';
 import 'package:listyb/domain/entities/yb_counts.dart';
 
+import 'package:listyb/di/stream_providers.dart';
+import 'package:listyb/di/usecase_providers.dart';
+import 'package:listyb/features/common/undo/undo_snackbar_service.dart';
+
+import 'widgets/list_card.dart';
+import 'widgets/list_actions_menu.dart';
+
 class ListsScreen extends ConsumerWidget {
   const ListsScreen({super.key});
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final listsAsync = ref.watch(listsStreamProvider);
+    final countsMapAsync = ref.watch(countsForAllStreamProvider);
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ListYB — Lists'),
+        title: Text(L10n.t(context, 'app.title')),
         actions: [
           IconButton(
+            tooltip: L10n.t(context, 'common.settings'),
             icon: const Icon(Icons.settings),
-            onPressed: () => context.push('/settings'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            onPressed: () => context.push('/about'),
+            onPressed: () => GoRouter.of(context).go('/settings'),
           ),
         ],
       ),
-      body: listsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, st) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text('Ошибка загрузки списков\n$e'),
-          ),
-        ),
-        data: (lists) {
-          if (lists.isEmpty) {
-            return const _EmptyState();
-          }
-          return ListView.separated(
-            itemCount: lists.length,
-            separatorBuilder: (context, _) => const Divider(height: 1),
-            itemBuilder: (context, i) {
-              final list = lists[i];
-              return _ListTile(list: list);
-            },
-          );
-        },
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _onCreateList(context, ref),
+        icon: const Icon(Icons.add),
+        label: Text(L10n.t(context, 'list.create')),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _createListDialog(context, ref),
-        child: const Icon(Icons.add),
-      ),
+      body: _Body(listsAsync: listsAsync, countsMapAsync: countsMapAsync),
     );
   }
 
-  Future<void> _createListDialog(BuildContext context, WidgetRef ref) async {
-    final controller = TextEditingController();
-    final createList = ref.read(createListUcProvider);
-    final name = await showDialog<String>(
+  Future<void> _onCreateList(BuildContext context, WidgetRef ref) async {
+    final uc = ref.read(createListUcProvider);
+    final title = await _askText(
+      context: context,
+      title: L10n.t(context, 'list.create'),
+      initial: '',
+    );
+    if (title == null) return;
+    try {
+      await uc(title);
+    } catch (e) {
+      if (!context.mounted) return;
+      _showError(context, e);
+    }
+  }
+
+  static Future<String?> _askText({
+    required BuildContext context,
+    required String title,
+    required String initial,
+  }) async {
+    final controller = TextEditingController(text: initial);
+    return showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Create list'),
+        title: Text(title),
         content: TextField(
           controller: controller,
-          decoration: const InputDecoration(hintText: 'List name'),
           autofocus: true,
-          onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
+          textInputAction: TextInputAction.done,
+          onSubmitted: (v) => Navigator.of(ctx).pop(controller.text.trim()),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
+            onPressed: () => Navigator.of(ctx).pop(null),
+            child: Text(L10n.t(ctx, 'common.cancel')),
           ),
-          FilledButton(
+          TextButton(
+            autofocus: true,
             onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-            child: const Text('Create'),
+            child: Text(L10n.t(ctx, 'common.save')),
           ),
         ],
       ),
     );
-    if (name == null || name.trim().isEmpty) return;
+  }
 
-    try {
-      final listId = await createList(name.trim());
-      if (!context.mounted) return;
-      context.push('/list/$listId');
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Не удалось создать список: $e')));
-    }
+  static void _showError(BuildContext context, Object e) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(e.toString())));
   }
 }
 
-class _ListTile extends ConsumerWidget {
-  const _ListTile({required this.list});
-  final YbList list;
+class _Body extends ConsumerWidget {
+  const _Body({required this.listsAsync, required this.countsMapAsync});
+
+  final AsyncValue<List<YbList>> listsAsync;
+  final AsyncValue<Map<int, YbCounts>> countsMapAsync;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final countsAsync = ref.watch(countsByListProvider(list.id));
-    return ListTile(
-      title: Text(list.title),
-      subtitle: countsAsync.when(
-        loading: () => const Text('Загрузка…'),
-        error: (error, stackTrace) => const Text('—'),
-        data: (YbCounts c) => Text('Открытые: ${c.active} / Всего: ${c.total}'),
-      ),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () => context.push('/list/${list.id}'),
-      onLongPress: () => _showListActions(context, ref, list),
-    );
+    // Ошибки
+    if (listsAsync.hasError) {
+      return Center(child: Text('Error: ${listsAsync.error}'));
+    }
+    if (countsMapAsync.hasError) {
+      return Center(child: Text('Error: ${countsMapAsync.error}'));
+    }
+    // Загрузка
+    if (listsAsync.isLoading || countsMapAsync.isLoading) {
+      return const _Loading();
+    }
+    final lists = listsAsync.value ?? const <YbList>[];
+    final countsMap = countsMapAsync.value ?? const <int, YbCounts>{};
+    if (lists.isEmpty) {
+      return _Empty(
+        onCreate: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(L10n.t(context, 'list.empty'))),
+          );
+        },
+      );
+    }
+    return _ListView(lists: lists, countsMap: countsMap);
   }
+}
 
-  Future<void> _showListActions(
-    BuildContext context,
-    WidgetRef ref,
-    YbList list,
-  ) async {
-    final rename = ref.read(renameListUcProvider);
-    final archive = ref.read(archiveListUcProvider);
-    final remove = ref.read(deleteListUcProvider);
+class _Loading extends StatelessWidget {
+  const _Loading();
 
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.edit),
-              title: const Text('Переименовать'),
-              onTap: () => Navigator.of(ctx).pop('rename'),
-            ),
-            ListTile(
-              leading: Icon(list.archived ? Icons.unarchive : Icons.archive),
-              title: Text(list.archived ? 'Разархивировать' : 'Архивировать'),
-              onTap: () => Navigator.of(ctx).pop('archive'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline),
-              title: const Text('Удалить'),
-              onTap: () => Navigator.of(ctx).pop('delete'),
-            ),
-          ],
+  @override
+  Widget build(BuildContext context) {
+    // Лёгкий скелетон/лоадер
+    return ListView.builder(
+      itemCount: 6,
+      itemBuilder: (context, i) => const ListTile(
+        leading: CircleAvatar(),
+        title: SizedBox(
+          height: 16,
+          child: DecoratedBox(decoration: BoxDecoration(color: Colors.black12)),
         ),
       ),
     );
-    if (!context.mounted || action == null) return;
-
-    try {
-      switch (action) {
-        case 'rename':
-          final controller = TextEditingController(text: list.title);
-          final newName = await showDialog<String>(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              title: const Text('Переименовать'),
-              content: TextField(
-                controller: controller,
-                autofocus: true,
-                onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text('Отмена'),
-                ),
-                FilledButton(
-                  onPressed: () =>
-                      Navigator.of(ctx).pop(controller.text.trim()),
-                  child: const Text('Сохранить'),
-                ),
-              ],
-            ),
-          );
-          if (!context.mounted) return;
-          if (newName != null && newName.isNotEmpty) {
-            await rename(list.id, newName);
-          }
-          break;
-
-        case 'archive':
-          await archive(list.id, archived: !list.archived);
-          break;
-
-        case 'delete':
-          final confirm = await showDialog<bool>(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              title: const Text('Удалить список?'),
-              content: Text(
-                '«${list.title}» и все его элементы будут удалены.',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(false),
-                  child: const Text('Отмена'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.of(ctx).pop(true),
-                  child: const Text('Удалить'),
-                ),
-              ],
-            ),
-          );
-          if (!context.mounted) return;
-          if (confirm == true) {
-            await remove(list.id);
-          }
-          break;
-      }
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Операция не выполнена: $e')));
-    }
   }
 }
 
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
+class _Empty extends StatelessWidget {
+  const _Empty({required this.onCreate});
+  final VoidCallback onCreate;
+
   @override
   Widget build(BuildContext context) {
-    return const Center(child: Text('Пока нет списков.\nСоздайте первый.'));
+    return Center(child: Text(L10n.t(context, 'list.empty')));
+  }
+}
+
+class _ListView extends ConsumerWidget {
+  const _ListView({required this.lists, required this.countsMap});
+
+  final List<YbList> lists;
+  final Map<int, YbCounts> countsMap;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ListView.builder(
+      itemCount: lists.length,
+      itemBuilder: (context, index) {
+        final list = lists[index];
+        final counts = countsMap[list.id];
+        return ListCard(
+          list: list,
+          counts: counts,
+          onTap: () => GoRouter.of(context).go('/list/${list.id}'),
+          onLongPressAt: (pos) => _onLongPressAt(context, ref, list, pos),
+        );
+      },
+    );
+  }
+
+  Future<void> _onLongPressAt(
+    BuildContext context,
+    WidgetRef ref,
+    YbList list,
+    Offset pos,
+  ) async {
+    final action = await showListContextMenu(
+      context: context,
+      globalPosition: pos,
+      list: list,
+    );
+    if (action == null) return;
+    if (!context.mounted) return;
+
+    switch (action) {
+      case ListAction.rename:
+        await _rename(context, ref, list);
+        break;
+      case ListAction.archive:
+        await _archive(context, ref, list, archived: true);
+        break;
+      case ListAction.unarchive:
+        await _archive(context, ref, list, archived: false);
+        break;
+      case ListAction.delete:
+        await _delete(context, ref, list);
+        break;
+    }
+  }
+
+  Future<void> _rename(BuildContext context, WidgetRef ref, YbList list) async {
+    final title = await ListsScreen._askText(
+      context: context,
+      title: L10n.t(context, 'list.rename'),
+      initial: list.title,
+    );
+    if (title == null || title.trim().isEmpty) return;
+    final uc = ref.read(renameListUcProvider);
+    try {
+      await uc(list.id, title);
+    } catch (e) {
+      if (!context.mounted) return;
+      ListsScreen._showError(context, e);
+    }
+  }
+
+  Future<void> _archive(
+    BuildContext context,
+    WidgetRef ref,
+    YbList list, {
+    required bool archived,
+  }) async {
+    final undo = ref.read(undoServiceProvider);
+    await undo.archiveWithUndo(
+      context: context,
+      listId: list.id,
+      archived: archived,
+    );
+  }
+
+  Future<void> _delete(BuildContext context, WidgetRef ref, YbList list) async {
+    final confirm = await _confirmDeleteWithAutoYes(context);
+    if (confirm != true) return;
+    if (!context.mounted) return;
+
+    final undo = ref.read(undoServiceProvider);
+    await undo.deleteWithUndo(context: context, listId: list.id);
+  }
+
+  /// Диалог подтверждения удаления:
+  /// - Кнопка по умолчанию "Да" (autofocus).
+  /// - Авто-подтверждение через 5 сек, если нет действий.
+  /// - Возвращает true/false.
+  Future<bool?> _confirmDeleteWithAutoYes(BuildContext context) async {
+    final completer = Completer<bool?>();
+    final navigator = Navigator.of(context);
+
+    Timer? timer;
+    bool decided = false;
+
+    void decide(bool result) {
+      if (decided) return;
+      decided = true;
+      timer?.cancel();
+      if (!completer.isCompleted) completer.complete(result);
+      if (navigator.canPop()) navigator.pop(result);
+    }
+
+    timer = Timer(const Duration(seconds: 5), () {
+      decide(true); // авто "Да"
+    });
+
+    // Показ диалога
+    showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return AlertDialog(
+          title: Text(L10n.t(ctx, 'list.delete')),
+          content: Text(L10n.t(ctx, 'snackbar.list_deleted')),
+          actions: [
+            TextButton(
+              onPressed: () => decide(false),
+              child: Text(L10n.t(ctx, 'common.cancel')),
+            ),
+            TextButton(
+              autofocus: true, // кнопка по умолчанию
+              onPressed: () => decide(true),
+              child: Text(L10n.t(ctx, 'common.delete')),
+            ),
+          ],
+        );
+      },
+    ).then((value) {
+      // Если диалог закрыли через barrier/back — решает таймер,
+      // либо сюда прилетит значение. В обеих случаях решает decide().
+      if (!decided && value != null) decide(value);
+    });
+
+    return completer.future;
   }
 }
