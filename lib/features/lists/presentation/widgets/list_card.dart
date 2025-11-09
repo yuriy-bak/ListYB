@@ -4,6 +4,8 @@ import 'package:listyb/domain/entities/yb_counts.dart';
 import 'package:listyb/domain/entities/yb_list.dart';
 
 /// Карточка списка с бейджем open/total и поддержкой long-press (контекстное меню).
+/// Заголовок переносится на несколько строк и карточка увеличивается по высоте
+/// автоматически, чтобы пользователь видел весь текст.
 class ListCard extends StatelessWidget {
   const ListCard({
     super.key,
@@ -30,9 +32,27 @@ class ListCard extends StatelessWidget {
         onLongPressAt(details.globalPosition);
       },
       child: Card(
-        child: ListTile(
-          title: Text(list.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-          trailing: _Badge(open: open, total: total),
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Многострочный заголовок с переносами
+              Expanded(
+                child: Text(
+                  list.title,
+                  softWrap: true,
+                  maxLines: null,
+                  overflow: TextOverflow.visible,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Бейдж open/total справа, не влияет на перенос заголовка
+              _Badge(open: open, total: total),
+            ],
+          ),
         ),
       ),
     );

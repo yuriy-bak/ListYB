@@ -188,12 +188,66 @@ void main() {
     await tester.tap(find.widgetWithText(PopupMenuItem<ListAction>, 'Удалить'));
     await tester.pumpAndSettle();
 
-    // Диалог: нажать кнопку "Удалить" (а не заголовок)
-    await tester.tap(find.widgetWithText(TextButton, 'Удалить'));
+    // Диалог: нажать кнопку "Удалить (N)" (а не заголовок)
+    final deleteText = find.byWidgetPredicate(
+      (w) => w is Text && (w.data?.startsWith('Удалить') ?? false),
+    );
+    final deleteButton = find.ancestor(
+      of: deleteText,
+      matching: find.byType(TextButton),
+    );
+    await tester.tap(deleteButton);
     await tester.pumpAndSettle();
 
     // Проверяем, что сервис удаления вызван
     expect(calls, contains('delete:42'));
+  });
+
+  testWidgets('Длинный заголовок переносится', (tester) async {
+    final longTitle =
+        'Очень очень очень длинное название списка, которое должно переноситься на несколько строк без обрезания и троеточий';
+    final lists = <YbList>[
+      YbList(
+        id: 99,
+        title: longTitle,
+        archived: false,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        sortOrder: 0,
+      ),
+    ];
+    final counts = <int, YbCounts>{
+      99: const YbCounts(total: 10, active: 7, done: 3),
+    };
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          listsStreamProvider.overrideWith((ref) => Stream.value(lists)),
+          countsForAllStreamProvider.overrideWith(
+            (ref) => Stream.value(counts),
+          ),
+        ],
+        child: const MaterialApp(home: ListsScreen()),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    final titleFinder = find.text(longTitle);
+    expect(titleFinder, findsOneWidget);
+
+    // Проверим, что это Text без ограничения по строкам
+    final textWidget = tester.widget<Text>(titleFinder);
+    expect(textWidget.maxLines, isNull);
+    expect(textWidget.softWrap, isTrue);
+
+    // Высота карточки должна быть больше базовой высоты однострочного айтема
+    final cardFinder = find.ancestor(
+      of: titleFinder,
+      matching: find.byType(Card),
+    );
+    final size = tester.getSize(cardFinder);
+    expect(size.height, greaterThan(72));
   });
 }
 
