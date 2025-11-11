@@ -1,6 +1,7 @@
 {
   "@@locale": "ru",
   "app.title": "ListYB",
+  "home.title": "Списки",
   "common.ok": "ОК",
   "common.cancel": "Отмена",
   "common.delete": "Удалить",
@@ -8,6 +9,7 @@
   "common.save": "Сохранить",
   "common.search": "Поиск",
   "common.settings": "Настройки",
+  "common.about": "О приложении",
   "list.create": "Создать список",
   "list.rename": "Переименовать",
   "list.archive": "Архивировать",

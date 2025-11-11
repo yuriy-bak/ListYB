@@ -27,22 +27,45 @@ class ListsScreen extends ConsumerWidget {
     final countsMapAsync = ref.watch(countsForAllStreamProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(L10n.t(context, 'app.title')),
-        actions: [
-          IconButton(
-            tooltip: L10n.t(context, 'common.settings'),
-            icon: const Icon(Icons.settings),
-            onPressed: () => GoRouter.of(context).go('/settings'),
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            title: Text(L10n.t(context, 'home.title')),
+            pinned: false,
+            floating: true,
+            snap: true,
+            actions: [
+              IconButton(
+                tooltip: L10n.t(context, 'common.settings'),
+                icon: const Icon(Icons.settings),
+                onPressed: () => GoRouter.of(context).push('/settings'),
+              ),
+              IconButton(
+                tooltip: L10n.t(context, 'common.about'),
+                icon: const Icon(Icons.info_outline),
+                onPressed: () => GoRouter.of(context).push('/about'),
+              ),
+            ],
+          ),
+          _BodySliver(listsAsync: listsAsync, countsMapAsync: countsMapAsync),
+          SliverToBoxAdapter(
+            child: SizedBox(height: 56), // 56 (FAB) + 24 (margin) + запас
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
+        key: const Key('fab_create_list'),
+        heroTag: 'fab_create',
         onPressed: () => _onCreateList(context, ref),
-        icon: const Icon(Icons.add),
-        label: Text(L10n.t(context, 'list.create')),
+        backgroundColor: Theme.of(
+          context,
+        ).colorScheme.primary.withValues(alpha: 0.65),
+        foregroundColor: Theme.of(
+          context,
+        ).colorScheme.onPrimary, // контрастная иконка
+        child: const Icon(Icons.add),
       ),
-      body: _Body(listsAsync: listsAsync, countsMapAsync: countsMapAsync),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 
@@ -100,55 +123,62 @@ class ListsScreen extends ConsumerWidget {
   }
 }
 
-class _Body extends ConsumerWidget {
-  const _Body({required this.listsAsync, required this.countsMapAsync});
+class _BodySliver extends ConsumerWidget {
+  const _BodySliver({required this.listsAsync, required this.countsMapAsync});
 
   final AsyncValue<List<YbList>> listsAsync;
   final AsyncValue<Map<int, YbCounts>> countsMapAsync;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Ошибки
+    // Ошибки -> Sliver
     if (listsAsync.hasError) {
-      return Center(child: Text('Error: ${listsAsync.error}'));
-    }
-    if (countsMapAsync.hasError) {
-      return Center(child: Text('Error: ${countsMapAsync.error}'));
-    }
-    // Загрузка
-    if (listsAsync.isLoading || countsMapAsync.isLoading) {
-      return const _Loading();
-    }
-    final lists = listsAsync.value ?? const <YbList>[];
-    final countsMap = countsMapAsync.value ?? const <int, YbCounts>{};
-    if (lists.isEmpty) {
-      return _Empty(
-        onCreate: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(L10n.t(context, 'list.empty'))),
-          );
-        },
+      return SliverFillRemaining(
+        hasScrollBody: false,
+        child: Center(child: Text('Error: ${listsAsync.error}')),
       );
     }
-    return _ListView(lists: lists, countsMap: countsMap);
+    if (countsMapAsync.hasError) {
+      return SliverFillRemaining(
+        hasScrollBody: false,
+        child: Center(child: Text('Error: ${countsMapAsync.error}')),
+      );
+    }
+    // Загрузка -> Sliver
+    if (listsAsync.isLoading || countsMapAsync.isLoading) {
+      return const _LoadingSliver();
+    }
+
+    final lists = listsAsync.value ?? const <YbList>[];
+    final countsMap = countsMapAsync.value ?? const <int, YbCounts>{};
+
+    // Пусто -> Sliver
+    if (lists.isEmpty) {
+      return SliverFillRemaining(
+        hasScrollBody: false,
+        child: _Empty(
+          onCreate: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(L10n.t(context, 'list.empty'))),
+            );
+          },
+        ),
+      );
+    }
+
+    // Список -> SliverList
+    return _ListSliver(lists: lists, countsMap: countsMap);
   }
 }
 
-class _Loading extends StatelessWidget {
-  const _Loading();
+class _LoadingSliver extends StatelessWidget {
+  const _LoadingSliver();
 
   @override
   Widget build(BuildContext context) {
-    // Лёгкий скелетон/лоадер
-    return ListView.builder(
-      itemCount: 6,
-      itemBuilder: (context, i) => const ListTile(
-        leading: CircleAvatar(),
-        title: SizedBox(
-          height: 16,
-          child: DecoratedBox(decoration: BoxDecoration(color: Colors.black12)),
-        ),
-      ),
+    return const SliverFillRemaining(
+      hasScrollBody: false,
+      child: Center(child: CircularProgressIndicator()),
     );
   }
 }
@@ -163,8 +193,8 @@ class _Empty extends StatelessWidget {
   }
 }
 
-class _ListView extends ConsumerWidget {
-  const _ListView({required this.lists, required this.countsMap});
+class _ListSliver extends ConsumerWidget {
+  const _ListSliver({required this.lists, required this.countsMap});
 
   final List<YbList> lists;
   final Map<int, YbCounts> countsMap;
@@ -172,9 +202,9 @@ class _ListView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    return ListView.builder(
-      itemCount: lists.length,
-      itemBuilder: (context, index) {
+
+    return SliverList(
+      delegate: SliverChildBuilderDelegate((context, index) {
         final list = lists[index];
         final counts = countsMap[list.id];
 
@@ -227,7 +257,7 @@ class _ListView extends ConsumerWidget {
           },
           child: card,
         );
-      },
+      }, childCount: lists.length),
     );
   }
 
@@ -303,11 +333,7 @@ class _ListView extends ConsumerWidget {
     await undo.deleteWithUndo(context: context, listId: list.id);
   }
 
-  /// Диалог подтверждения удаления:
-  /// - Кнопка по умолчанию "Да" (autofocus).
-  /// - Авто-подтверждение через 5 сек, если нет действий.
-  /// - Показывает обратный отсчет на кнопке, если showCountdownOnButton=true.
-  /// - Возвращает true/false.
+  /// Диалог подтверждения удаления (с авто «Да» через 5 сек).
   Future<bool?> _confirmDeleteWithAutoYes(
     BuildContext context, {
     bool showCountdownOnButton = false,
@@ -343,7 +369,6 @@ class _ListView extends ConsumerWidget {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setState) {
-            // UI-таймер только для обновления подписи
             uiTimer ??= (showCountdownOnButton)
                 ? Timer.periodic(const Duration(seconds: 1), (t) {
                     if (secondsLeft > 1) {
@@ -369,7 +394,7 @@ class _ListView extends ConsumerWidget {
                   child: Text(L10n.t(ctx, 'common.cancel')),
                 ),
                 TextButton(
-                  autofocus: true, // кнопка по умолчанию
+                  autofocus: true,
                   onPressed: () => decide(true),
                   child: Text(deleteLabel),
                 ),
@@ -379,8 +404,6 @@ class _ListView extends ConsumerWidget {
         );
       },
     ).then((value) {
-      // Если диалог закрыли через barrier/back — решит автотаймер,
-      // либо сюда прилетит значение. В обеих случаях решает decide().
       if (!decided && value != null) decide(value);
       cleanupTimers();
       return completer.future;

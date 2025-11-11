@@ -6,6 +6,7 @@ class L10n {
     // Минимальная карта для R1-04. На R1-06 заменим на arb/intl.
     const ru = <String, String>{
       'app.title': 'ListYB',
+      'home.title': 'Списки',
       'common.ok': 'ОК',
       'common.cancel': 'Отмена',
       'common.delete': 'Удалить',
@@ -13,6 +14,7 @@ class L10n {
       'common.save': 'Сохранить',
       'common.search': 'Поиск',
       'common.settings': 'Настройки',
+      'common.about': 'О приложении',
 
       'list.create': 'Создать список',
       'list.rename': 'Переименовать',

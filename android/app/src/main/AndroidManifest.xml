@@ -10,7 +10,8 @@
         <!-- Указываем, что используем Android embedding v2 -->
         <meta-data
             android:name="flutterEmbedding"
-            android:value="2" />
+            android:value="2"
+            />
 
         <activity
             android:name=".MainActivity"
@@ -20,6 +21,10 @@
             android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode">
 
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
             
         <!-- Deep link: listyb://... -->
             <intent-filter android:autoVerify="false">
