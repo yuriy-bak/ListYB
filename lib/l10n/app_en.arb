@@ -1,6 +1,7 @@
 {
   "@@locale": "en",
   "app.title": "ListYB",
+  "home.title": "Lists",
   "common.ok": "OK",
   "common.cancel": "Cancel",
   "common.delete": "Delete",
@@ -8,6 +9,7 @@
   "common.save": "Save",
   "common.search": "Search",
   "common.settings": "Settings",
+  "common.about": "About"
   "list.create": "Create list",
   "list.rename": "Rename",
   "list.archive": "Archive",

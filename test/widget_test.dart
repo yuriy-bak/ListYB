@@ -3,22 +3,28 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:listyb/app/router.dart';
+import 'package:listyb/l10n/l10n_stub.dart';
 
 void main() {
-  testWidgets('App smoke test: renders ListsScreen title', (
-    WidgetTester tester,
+  testWidgets('App smoke test: renders ListsScreen localized title', (
+    tester,
   ) async {
-    // Поднимаем приложение с роутером и провайдерами
+    // Поднимаем приложение с реальным роутером и провайдерами
     await tester.pumpWidget(
       ProviderScope(child: MaterialApp.router(routerConfig: appRouter)),
     );
 
-    // Для тестовой среды достаточно тикнуть пару кадров.
-    await tester.pump(); // первый кадр
-    await tester.pump(const Duration(milliseconds: 50)); // второй тик
+    // Дожидаемся стабилизации анимаций/фреймов
+    // Избегаем pumpAndSettle (может не завершаться из‑за Stream'ов/анимаций в тестовой среде)
+    // Делаем несколько контролируемых тиков кадра
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
 
-    // Подправь строку под фактический заголовок, если отличается.
-    // Здесь проверяем, что хоть какой-то текст с "List" отрисовался.
-    expect(find.textContaining('List'), findsWidgets);
+    // Получаем локализованную строку заголовка и проверяем, что она есть в дереве
+    final ctx = tester.element(find.byType(Scaffold).first);
+    final titleText = L10n.t(ctx, 'home.title');
+
+    expect(find.text(titleText), findsOneWidget);
   });
 }
