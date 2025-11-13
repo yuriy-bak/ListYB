@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import '../app_database.dart';
+
 part 'items_dao.g.dart';
 
 @DriftAccessor(tables: [ItemsTable])
@@ -47,11 +48,13 @@ class ItemsDao extends DatabaseAccessor<AppDatabase> with _$ItemsDaoMixin {
   }) async {
     final now = DateTime.now();
     final companion = ItemsTableCompanion(
+      // изменяем только переданные поля
       isDone: completed == null ? const Value.absent() : Value(completed),
       title: title == null ? const Value.absent() : Value(title.trim()),
       note: note == null ? const Value.absent() : Value(note),
       position: position == null ? const Value.absent() : Value(position),
       updatedAt: Value(now),
+      // completedAt ставим только если меняется completed
       completedAt: completed == null
           ? const Value.absent()
           : Value(completed ? now : null),
@@ -62,12 +65,10 @@ class ItemsDao extends DatabaseAccessor<AppDatabase> with _$ItemsDaoMixin {
   Future<void> deleteItem(int id) =>
       (delete(itemsTable)..where((t) => t.id.equals(id))).go();
 
-  /// Стрим элементов списка с фильтрами
   Stream<List<ItemsTableData>> watchByList(
     int listId, {
     bool? completed, // true -> только выполненные, false -> только активные
-    String?
-    query, // поиск по title/note, LIKE %query% (case-insensitive по lower())
+    String? query, // поиск по title/note, LIKE %query%
   }) {
     final q = (select(itemsTable)
       ..where((t) => t.listId.equals(listId))
@@ -81,12 +82,9 @@ class ItemsDao extends DatabaseAccessor<AppDatabase> with _$ItemsDaoMixin {
     }
 
     if (query != null && query.trim().isNotEmpty) {
-      final likeLower = '%${query.trim().toLowerCase()}%';
-      q.where((t) {
-        final byTitle = t.title.lower().like(likeLower);
-        final byNote = t.note.lower().like(likeLower);
-        return byTitle | byNote;
-      });
+      final like = '%${query.trim()}%';
+      // Поиск по title ИЛИ note
+      q.where((t) => t.title.like(like) | t.note.like(like));
     }
 
     return q.watch();
@@ -113,7 +111,9 @@ class ItemsDao extends DatabaseAccessor<AppDatabase> with _$ItemsDaoMixin {
     required int newIndex,
   }) async {
     if (oldIndex == newIndex) return;
+
     await transaction(() async {
+      // Текущий порядок
       final rows =
           await (select(itemsTable)
                 ..where((t) => t.listId.equals(listId))
@@ -122,6 +122,7 @@ class ItemsDao extends DatabaseAccessor<AppDatabase> with _$ItemsDaoMixin {
                   (t) => OrderingTerm.asc(t.id),
                 ]))
               .get();
+
       if (rows.isEmpty) return;
       if (oldIndex < 0 || oldIndex >= rows.length) return;
       if (newIndex < 0 || newIndex >= rows.length) return;
@@ -130,8 +131,10 @@ class ItemsDao extends DatabaseAccessor<AppDatabase> with _$ItemsDaoMixin {
       final moved = list.removeAt(oldIndex);
       list.insert(newIndex, moved);
 
+      // Переприсваиваем position
       for (var i = 0; i < list.length; i++) {
-        await (update(itemsTable)..where((t) => t.id.equals(list[i].id))).write(
+        final it = list[i];
+        await (update(itemsTable)..where((t) => t.id.equals(it.id))).write(
           ItemsTableCompanion(position: Value(i)),
         );
       }
