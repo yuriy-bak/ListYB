@@ -14,5 +14,7 @@
 - ToggleItem(itemId, completed)
 - ReorderItems(listId, orderedItemIds)
 - DeleteItem(itemId)
-- WatchItems(listId, query?, completed?)
+- WatchItems(listId)                                       # «сырые» элементы без фильтра/поиска
+- WatchItemsFiltered(listId, query?, completed?)           # фильтры + строка поиска
+
 ``

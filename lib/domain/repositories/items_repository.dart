@@ -13,4 +13,13 @@ abstract class ItemsRepository {
     bool? onlyActive,
   });
   Stream<YbItem?> watchOne(int itemId);
+
+  /// Поток с учётом текстового поиска по подстроке (регистронезависимо).
+  /// Поиск выполняется на уровне БД (DAO.watchByList(listId, completed, query)).
+  Stream<List<YbItem>> watchForListFiltered(
+    int listId, {
+    bool? onlyDone,
+    bool? onlyActive,
+    String? query,
+  });
 }
