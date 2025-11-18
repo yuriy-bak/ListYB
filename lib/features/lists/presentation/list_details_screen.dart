@@ -257,205 +257,228 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
       },
 
       child: Scaffold(
-        appBar: AppBar(
-          // Авто-стрелка не появится, если экран открыт через context.go(...)
-          // поэтому показываем BackButton принудительно и задаём поведение.
-          automaticallyImplyLeading: false,
-          leading: BackButton(
-            onPressed: () {
-              final nav = Navigator.of(context);
-              if (nav.canPop()) {
-                nav.maybePop();
-              } else {
-                context.go('/');
-              }
-            },
-          ),
-          title: titleWidget,
-          actions: [
-            IconButton(
-              key: const Key('search_button'),
-              tooltip: s.commonSearch,
-              icon: Icon(_searchMode ? Icons.close : Icons.search),
-              onPressed: () => _toggleSearchMode(ref, clearOnExit: true),
-            ),
-            _FilterSelectorAction(
-              key: const Key('filter_selector'),
-              label: filterLabel(currentFilter),
-              onSelected: (a) {
-                final notifier = ref.read(
-                  itemsFilterProvider(widget.listId).notifier,
-                );
-                switch (a) {
-                  case _FilterAction.all:
-                    notifier.state = const ItemsFilter.all();
-                    break;
-                  case _FilterAction.open:
-                    notifier.state = const ItemsFilter.active();
-                    break;
-                  case _FilterAction.done:
-                    notifier.state = const ItemsFilter.done();
-                    break;
-                }
-              },
-              itemBuilder: (ctx) {
-                final entries = <PopupMenuEntry<_FilterAction>>[];
-                final current = currentFilter;
-                final currentAction = current.completed == true
-                    ? _FilterAction.done
-                    : (current.completed == false
-                          ? _FilterAction.open
-                          : _FilterAction.all);
-
-                String labelFor(_FilterAction a) => switch (a) {
-                  _FilterAction.all => s.itemsFilterAll,
-                  _FilterAction.open => s.itemsFilterOpen,
-                  _FilterAction.done => s.itemsFilterDone,
-                };
-
-                for (final a in _FilterAction.values) {
-                  final selected = (a == currentAction);
-                  entries.add(
-                    PopupMenuItem<_FilterAction>(
-                      key: Key(
-                        a == _FilterAction.all
-                            ? 'filter_all'
-                            : a == _FilterAction.open
-                            ? 'filter_open'
-                            : 'filter_done',
-                      ),
-                      value: a,
-                      padding: EdgeInsets.zero,
-                      child: Container(
-                        decoration: selected
-                            ? BoxDecoration(
-                                color: cs.primary.withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(6),
-                              )
-                            : null,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.check,
-                              size: 18,
-                              color: selected ? cs.primary : Colors.transparent,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              labelFor(a),
-                              style: selected
-                                  ? TextStyle(
-                                      color: cs.primary,
-                                      fontWeight: FontWeight.w600,
-                                    )
-                                  : null,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }
-                return entries;
-              },
-            ),
-          ],
-        ),
-        body: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              QuickAddField(
-                controller: _quickAddController,
-                focusNode: _quickAddFocus,
-                textFieldKey: const Key('quick_add_field'),
-                hintText: s.itemsAddPlaceholder,
-                onSubmitted: _onQuickAddSubmitted,
-                autofocus: widget.quickAdd,
+        // Переводим экран на NestedScrollView + SliverAppBar с автоскрытием
+        body: NestedScrollView(
+          // Шапка, которая прячется/появляется при прокрутке
+          headerSliverBuilder: (ctx, innerBoxIsScrolled) => [
+            SliverAppBar(
+              // Принудительно показываем стрелку «Назад»
+              automaticallyImplyLeading: false,
+              leading: BackButton(
+                onPressed: () {
+                  final nav = Navigator.of(context);
+                  if (nav.canPop()) {
+                    nav.maybePop();
+                  } else {
+                    context.go('/');
+                  }
+                },
               ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: itemsAsync.when(
-                  data: (items) {
-                    if (items.isEmpty) return const EmptyState();
-
-                    Future<void> onReorder(int oldIndex, int newIndex) async {
-                      final ids = items.map((e) => e.id).toList();
-                      if (newIndex > oldIndex) newIndex -= 1;
-                      final moved = ids.removeAt(oldIndex);
-                      ids.insert(newIndex, moved);
-                      await reorderUc(widget.listId, ids);
+              title: titleWidget,
+              actions: [
+                IconButton(
+                  key: const Key('search_button'),
+                  tooltip: s.commonSearch,
+                  icon: Icon(_searchMode ? Icons.close : Icons.search),
+                  onPressed: () => _toggleSearchMode(ref, clearOnExit: true),
+                ),
+                _FilterSelectorAction(
+                  key: const Key('filter_selector'),
+                  label: filterLabel(currentFilter),
+                  onSelected: (a) {
+                    final notifier = ref.read(
+                      itemsFilterProvider(widget.listId).notifier,
+                    );
+                    switch (a) {
+                      case _FilterAction.all:
+                        notifier.state = const ItemsFilter.all();
+                        break;
+                      case _FilterAction.open:
+                        notifier.state = const ItemsFilter.active();
+                        break;
+                      case _FilterAction.done:
+                        notifier.state = const ItemsFilter.done();
+                        break;
                     }
-
-                    Widget buildRow(int index) {
-                      final it = items[index];
-
-                      return Dismissible(
-                        key: ValueKey('dismiss_${it.id}'),
-                        direction: DismissDirection.horizontal,
-                        background: _SwipeBackground(
-                          alignment: Alignment.centerLeft,
-                          color: Colors.blue.shade50,
-                          icon: Icons.edit,
-                          iconColor: Colors.blue,
-                        ),
-                        secondaryBackground: _SwipeBackground(
-                          alignment: Alignment.centerRight,
-                          color: Colors.red.shade50,
-                          icon: Icons.delete,
-                          iconColor: Colors.red,
-                        ),
-                        confirmDismiss: (direction) async {
-                          if (direction == DismissDirection.startToEnd) {
-                            await _onEditTitle(it);
-                            return false;
-                          } else {
-                            return true; // delete
-                          }
-                        },
-                        onDismissed: (direction) {
-                          if (direction == DismissDirection.endToStart) {
-                            _onDeleteWithUndo(it);
-                          }
-                        },
-                        child: Material(
-                          key: ValueKey('item_${it.id}'),
-                          child: ItemTile(
-                            item: it,
-                            itemIndex: index,
-                            dndEnabled: dndEnabled,
-                            onToggle: () => _onToggleItem(it.id),
-                            onDelete: () => _onDeleteWithUndo(it),
-                            focusNode: _focusFor(it.id),
+                  },
+                  itemBuilder: (ctx) {
+                    final entries = <PopupMenuEntry<_FilterAction>>[];
+                    final current = currentFilter;
+                    final currentAction = current.completed == true
+                        ? _FilterAction.done
+                        : (current.completed == false
+                              ? _FilterAction.open
+                              : _FilterAction.all);
+                    String labelFor(_FilterAction a) => switch (a) {
+                      _FilterAction.all => s.itemsFilterAll,
+                      _FilterAction.open => s.itemsFilterOpen,
+                      _FilterAction.done => s.itemsFilterDone,
+                    };
+                    for (final a in _FilterAction.values) {
+                      final selected = (a == currentAction);
+                      entries.add(
+                        PopupMenuItem<_FilterAction>(
+                          key: Key(
+                            a == _FilterAction.all
+                                ? 'filter_all'
+                                : a == _FilterAction.open
+                                ? 'filter_open'
+                                : 'filter_done',
+                          ),
+                          value: a,
+                          padding: EdgeInsets.zero,
+                          child: Container(
+                            decoration: selected
+                                ? BoxDecoration(
+                                    color: cs.primary.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(6),
+                                  )
+                                : null,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.check,
+                                  size: 18,
+                                  color: selected
+                                      ? cs.primary
+                                      : Colors.transparent,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  labelFor(a),
+                                  style: selected
+                                      ? TextStyle(
+                                          color: cs.primary,
+                                          fontWeight: FontWeight.w600,
+                                        )
+                                      : null,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       );
                     }
-
-                    if (dndEnabled) {
-                      return ReorderableListView.builder(
-                        buildDefaultDragHandles: false,
-                        itemCount: items.length,
-                        onReorder: onReorder,
-                        itemBuilder: (context, index) => buildRow(index),
-                      );
-                    } else {
-                      return ListView.builder(
-                        itemCount: items.length,
-                        itemBuilder: (context, index) => buildRow(index),
-                      );
-                    }
+                    return entries;
                   },
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
-                  error: (e, _) => Center(child: Text(e.toString())),
+                ),
+              ],
+              // Ключевые флаги для автоскрытия
+              floating: true,
+              snap: true,
+              // Переносим QuickAdd в низ шапки, чтобы он скрывался вместе с AppBar
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(64),
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: QuickAddField(
+                      controller: _quickAddController,
+                      focusNode: _quickAddFocus,
+                      textFieldKey: const Key('quick_add_field'),
+                      hintText: s.itemsAddPlaceholder,
+                      onSubmitted: _onQuickAddSubmitted,
+                      // Автофокус сохранён — поле получает фокус при открытии экрана,
+                      // но теперь находится в шапке и будет скрываться/появляться с ней.
+                      autofocus: widget.quickAdd,
+                    ),
+                  ),
                 ),
               ),
-            ],
+
+              // (не делаем pinned, чтобы шапка полностью исчезала)
+              elevation: 0,
+            ),
+          ],
+
+          body: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Expanded(
+                  child: itemsAsync.when(
+                    data: (items) {
+                      if (items.isEmpty) return const EmptyState();
+
+                      Future<void> onReorder(int oldIndex, int newIndex) async {
+                        final ids = items.map((e) => e.id).toList();
+                        if (newIndex > oldIndex) newIndex -= 1;
+                        final moved = ids.removeAt(oldIndex);
+                        ids.insert(newIndex, moved);
+                        await reorderUc(widget.listId, ids);
+                      }
+
+                      Widget buildRow(int index) {
+                        final it = items[index];
+
+                        return Dismissible(
+                          key: ValueKey('dismiss_${it.id}'),
+                          direction: DismissDirection.horizontal,
+                          background: _SwipeBackground(
+                            alignment: Alignment.centerLeft,
+                            color: Colors.blue.shade50,
+                            icon: Icons.edit,
+                            iconColor: Colors.blue,
+                          ),
+                          secondaryBackground: _SwipeBackground(
+                            alignment: Alignment.centerRight,
+                            color: Colors.red.shade50,
+                            icon: Icons.delete,
+                            iconColor: Colors.red,
+                          ),
+                          confirmDismiss: (direction) async {
+                            if (direction == DismissDirection.startToEnd) {
+                              await _onEditTitle(it);
+                              return false;
+                            } else {
+                              return true; // delete
+                            }
+                          },
+                          onDismissed: (direction) {
+                            if (direction == DismissDirection.endToStart) {
+                              _onDeleteWithUndo(it);
+                            }
+                          },
+                          child: Material(
+                            key: ValueKey('item_${it.id}'),
+                            child: ItemTile(
+                              item: it,
+                              itemIndex: index,
+                              dndEnabled: dndEnabled,
+                              onToggle: () => _onToggleItem(it.id),
+                              onDelete: () => _onDeleteWithUndo(it),
+                              focusNode: _focusFor(it.id),
+                            ),
+                          ),
+                        );
+                      }
+
+                      if (dndEnabled) {
+                        return ReorderableListView.builder(
+                          buildDefaultDragHandles: false,
+                          itemCount: items.length,
+                          onReorder: onReorder,
+                          itemBuilder: (context, index) => buildRow(index),
+                        );
+                      } else {
+                        return ListView.builder(
+                          itemCount: items.length,
+                          itemBuilder: (context, index) => buildRow(index),
+                        );
+                      }
+                    },
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
+                    error: (e, _) => Center(child: Text(e.toString())),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
