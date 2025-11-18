@@ -16,7 +16,9 @@ import 'package:listyb/domain/usecases/items/delete_item_uc.dart';
 import 'package:listyb/domain/usecases/items/reorder_items_uc.dart';
 import 'package:listyb/domain/usecases/items/toggle_item_uc.dart';
 import 'package:listyb/domain/usecases/items/watch_items_uc.dart';
+import 'package:listyb/domain/usecases/items/watch_items_filtered_uc.dart';
 import 'package:listyb/domain/usecases/items/watch_item_uc.dart';
+import 'package:listyb/domain/usecases/lists/watch_list_uc.dart';
 
 // Lists
 final createListUcProvider = Provider<CreateListUc>((ref) {
@@ -86,7 +88,17 @@ final watchItemsUcProvider = Provider<WatchItemsUc>((ref) {
   return WatchItemsUc(repo);
 });
 
+final watchItemsFilteredUcProvider = Provider<WatchItemsFilteredUc>((ref) {
+  final repo = ref.watch(itemsRepositoryProvider);
+  return WatchItemsFilteredUc(repo);
+});
+
 final watchItemUcProvider = Provider<WatchItemUc>((ref) {
   final repo = ref.watch(itemsRepositoryProvider);
   return WatchItemUc(repo);
+});
+
+final watchListUcProvider = Provider<WatchListUc>((ref) {
+  final repo = ref.watch(listsRepositoryProvider);
+  return WatchListUc(repo);
 });

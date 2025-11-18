@@ -1,13 +1,15 @@
 import 'dart:async';
-import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:listyb/data/db/app_database.dart';
-import 'package:listyb/di/database_providers.dart';
+import 'package:listyb/l10n/strings.dart';
+import 'package:listyb/domain/entities/yb_item.dart';
+import 'package:listyb/di/usecase_providers.dart';
+import 'package:listyb/features/lists/presentation/list_details_providers.dart';
+import 'package:listyb/features/lists/presentation/widgets/empty_state.dart';
+import 'package:listyb/features/lists/presentation/widgets/item_tile.dart';
+import 'package:listyb/features/lists/presentation/widgets/quick_add_field.dart';
 import 'package:listyb/features/lists/application/items_filter.dart';
-import 'package:listyb/features/lists/application/watch_list_uc_provider.dart';
 
 class ListDetailsScreen extends ConsumerStatefulWidget {
   const ListDetailsScreen({
@@ -15,390 +17,536 @@ class ListDetailsScreen extends ConsumerStatefulWidget {
     required this.listId,
     this.quickAdd = false,
     this.autoCloseWhenDone = false,
-    this.isColdStart = false, // NEW
+    this.isColdStart = false,
   });
 
   final int listId;
-
-  /// Быстрый режим добавления (из диплинка /list/:id?qa=1).
   final bool quickAdd;
-
-  /// Для cold-start QuickAdd: после действия закрыть приложение, если некуда вернуться.
   final bool autoCloseWhenDone;
-
-  /// Признак, что экран открыт холодным стартом (через диплинк)
-  /// и маршрут помечен ?cold=1.
-  final bool isColdStart; // NEW
+  final bool isColdStart;
 
   @override
   ConsumerState<ListDetailsScreen> createState() => _ListDetailsScreenState();
 }
 
 class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
-  final _inputController = TextEditingController();
+  final _quickAddController = TextEditingController();
   final _searchController = TextEditingController();
-  final _focus = FocusNode();
 
-  bool? _completedFilter; // null = все, false = активные, true = выполненные
-  Timer? _searchDebounce;
+  final _quickAddFocus = FocusNode();
+  final _searchFocus = FocusNode();
+
+  bool _searchMode = false;
+
+  List<YbItem> _lastAllItems = const [];
+  final Map<int, FocusNode> _itemFocus = {};
+  FocusNode _focusFor(int id) => _itemFocus.putIfAbsent(id, () => FocusNode());
 
   @override
   void initState() {
     super.initState();
-    _searchController.addListener(_onSearchChanged);
-
     if (widget.quickAdd) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _openQuickAddDialog();
-      });
+      WidgetsBinding.instance.addPostFrameCallback((_) => _focusQuickAdd());
     }
   }
 
   @override
   void dispose() {
-    _searchDebounce?.cancel();
-    _inputController.dispose();
+    for (final n in _itemFocus.values) {
+      n.dispose();
+    }
+    _quickAddFocus.dispose();
+    _searchFocus.dispose();
+    _quickAddController.dispose();
     _searchController.dispose();
-    _focus.dispose();
     super.dispose();
   }
 
-  void _setFilter(bool? v) {
-    setState(() => _completedFilter = v);
-  }
+  void _focusQuickAdd() {}
 
-  void _onSearchChanged() {
-    _searchDebounce?.cancel();
-    _searchDebounce = Timer(const Duration(milliseconds: 250), () {
-      if (!mounted) return;
-      setState(() {});
-    });
-  }
+  Future<void> _onQuickAddSubmitted(String text) async {
+    final s = Strings.of(context);
+    final addItem = ref.read(addItemUcProvider);
+    if (text.trim().isEmpty) return;
+    await addItem(widget.listId, text.trim());
+    _quickAddController.clear();
 
-  Future<void> _addItem() async {
-    final text = _inputController.text.trim();
-    if (text.isEmpty) return;
-    final db = ref.read(appDatabaseProvider);
-    try {
-      await db.itemsDao.createItem(listId: widget.listId, title: text);
-      _inputController.clear();
+    if (widget.autoCloseWhenDone) {
+      if (mounted) Navigator.of(context).maybePop();
+    } else {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Элемент добавлен')));
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Ошибка при добавлении')));
+      _quickAddFocus.requestFocus();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(s.commonSave),
+          duration: const Duration(milliseconds: 600),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(12),
+        ),
+      );
     }
   }
 
-  Future<void> _toggle(ItemsTableData item, bool value) async {
-    final db = ref.read(appDatabaseProvider);
-    await db.itemsDao.updateItem(id: item.id, completed: value);
+  Future<void> _onToggleItem(int itemId) async {
+    final toggle = ref.read(toggleItemUcProvider);
+    await toggle(itemId);
   }
 
-  Future<void> _delete(ItemsTableData item) async {
-    final db = ref.read(appDatabaseProvider);
-    final deleted = item; // копия для Undo
-    await db.itemsDao.deleteItem(item.id);
+  Future<void> _onDeleteWithUndo(YbItem item) async {
+    final s = Strings.of(context);
+    final deleteUc = ref.read(deleteItemUcProvider);
+    final addUc = ref.read(addItemUcProvider);
+    final reorderUc = ref.read(reorderItemsUcProvider);
+
+    final before = List<YbItem>.from(_lastAllItems);
+    final oldIndex = before.indexWhere((e) => e.id == item.id);
+    final baseIdsWithout = before
+        .where((e) => e.id != item.id)
+        .map((e) => e.id)
+        .toList();
+
+    await deleteUc(item.id);
     if (!mounted) return;
 
-    final messenger = ScaffoldMessenger.of(context);
-    final snack = SnackBar(
-      content: const Text('Элемент удалён'),
-      action: SnackBarAction(
-        label: 'Отменить',
-        onPressed: () async {
-          final now = DateTime.now();
-          await db.itemsDao.insertItem(
-            ItemsTableCompanion.insert(
-              listId: deleted.listId,
-              title: deleted.title,
-              createdAt: now,
-              updatedAt: now,
-              isDone: Value(deleted.isDone),
-              position: Value(deleted.position),
-              completedAt: Value(deleted.completedAt),
-              note: Value(deleted.note),
-            ),
-          );
-        },
+    final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        content: Text(s.snackbarItemDeleted),
+        duration: const Duration(seconds: 3),
+        action: SnackBarAction(
+          label: s.snackbarUndo,
+          onPressed: () async {
+            final newId = await addUc(widget.listId, item.title);
+            final ids = List<int>.from(baseIdsWithout);
+            final insertIndex = (oldIndex < 0)
+                ? ids.length
+                : oldIndex.clamp(0, ids.length);
+            ids.insert(insertIndex, newId);
+            await reorderUc(widget.listId, ids);
+
+            if (!mounted) return;
+            FocusScope.of(context).unfocus();
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _focusFor(newId).requestFocus();
+            });
+          },
+        ),
       ),
     );
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(snack);
   }
 
-  /// Открывает компактный диалог «Быстро добавить…».
-  Future<void> _openQuickAddDialog() async {
-    final controller = TextEditingController();
+  Future<void> _onEditTitle(YbItem item) async {
+    final s = Strings.of(context);
+    final updateUc = ref.read(updateItemUcProvider);
 
-    final result = await showDialog<String>(
+    final controller = TextEditingController(text: item.title);
+    final newTitle = await showDialog<String>(
       context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Быстро добавить'),
+      builder: (ctx) => AlertDialog(
+        title: Text(s.commonEdit),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Название элемента',
-            isDense: true,
+          decoration: InputDecoration(
+            hintText: s.itemsAddPlaceholder,
+            border: const OutlineInputBorder(),
           ),
-          onSubmitted: (v) => Navigator.of(dialogContext).pop(v.trim()),
+          onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(null),
-            child: const Text('Отмена'),
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(s.commonCancel),
           ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.of(dialogContext).pop(controller.text.trim()),
-            child: const Text('Добавить'),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+            child: Text(s.commonSave),
           ),
         ],
       ),
     );
 
-    if (!mounted) return;
+    if (newTitle != null && newTitle.isNotEmpty && newTitle != item.title) {
+      await updateUc(item.copyWith(title: newTitle));
+      _focusFor(item.id).requestFocus();
+    }
+  }
 
-    if (result != null && result.isNotEmpty) {
-      final db = ref.read(appDatabaseProvider);
-      try {
-        await db.itemsDao.createItem(listId: widget.listId, title: result);
-        if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Элемент добавлен')));
-      } catch (_) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Не удалось добавить элемент')),
-        );
+  void _toggleSearchMode(WidgetRef ref, {required bool clearOnExit}) {
+    setState(() {
+      _searchMode = !_searchMode;
+      if (_searchMode) {
+        _searchFocus.requestFocus();
+      } else {
+        if (clearOnExit) {
+          _searchController.clear();
+          ref.read(itemsQueryProvider(widget.listId).notifier).state = '';
+        }
+        _searchFocus.unfocus();
       }
-    }
-
-    // Закрываем сам экран согласно ожиданию UX.
-    await _finishQuickAdd();
-  }
-
-  /// Закрывает текущий экран (и при необходимости приложение) для QuickAdd.
-  Future<void> _finishQuickAdd() async {
-    if (!mounted) return;
-
-    final router = GoRouter.of(context);
-
-    if (router.canPop()) {
-      // Горячий диплинк: вернёмся на предыдущий экран
-      context.pop();
-      return;
-    }
-
-    // Холодный диплинк QuickAdd: закрыть приложение, если явно указано
-    if (widget.autoCloseWhenDone) {
-      context.go('/');
-      await SystemNavigator.pop();
-      return;
-    }
-
-    // Если это не QuickAdd‑cold и попать некуда — вернёмся Домой
-    context.go('/');
-  }
-
-  /// Единая логика системного Back:
-  /// - если можем попнуть стек go_router — делаем pop()
-  /// - если стек пуст и это холодный старт обычного списка — закрываем приложение
-  /// - иначе — идём на Домашний '/'
-  Future<void> _handleSystemBack() async {
-    final router = GoRouter.of(context);
-    if (router.canPop()) {
-      context.pop();
-      return;
-    }
-
-    // Стек пуст.
-    // Для обычного "холодного" открытия списка — закрываем приложение.
-    // (QuickAdd имеет отдельную логику через autoCloseWhenDone)
-    if (widget.isColdStart && !widget.quickAdd) {
-      await SystemNavigator.pop();
-      return;
-    }
-
-    // Во всех остальных корневых случаях — на Домашний.
-    context.go('/');
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final listAsync = ref.watch(watchListUcProvider(widget.listId));
-    final itemsAsync = ref.watch(
-      watchItemsByListProvider((
-        listId: widget.listId,
-        filter: ItemsFilter(
-          completed: _completedFilter,
-          query: _searchController.text,
-        ),
-      )),
+    ref.listen<AsyncValue<List<YbItem>>>(
+      allItemsStreamProvider(widget.listId),
+      (prev, next) => next.whenData((items) => _lastAllItems = items),
     );
 
+    final itemsAsync = ref.watch(itemsFilteredStreamProvider(widget.listId));
+    final dndEnabled = ref.watch(dndEnabledForListProvider(widget.listId));
+    final reorderUc = ref.read(reorderItemsUcProvider);
+    final listAsync = ref.watch(watchListStreamProvider(widget.listId));
+
+    final s = Strings.of(context);
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    final currentFilter = ref.watch(itemsFilterProvider(widget.listId));
+    String filterLabel(ItemsFilter f) {
+      if (f.completed == true) return s.itemsFilterDone;
+      if (f.completed == false) return s.itemsFilterOpen;
+      return s.itemsFilterAll;
+    }
+
+    final titleWidget = _searchMode
+        ? TextField(
+            key: const Key('search_field'),
+            controller: _searchController,
+            focusNode: _searchFocus,
+            autofocus: true,
+            textInputAction: TextInputAction.search,
+            style: theme.textTheme.titleMedium?.copyWith(color: cs.onSurface),
+            cursorColor: cs.onSurface,
+            decoration: InputDecoration(
+              hintText: s.commonSearch,
+              hintStyle: theme.textTheme.titleMedium?.copyWith(
+                color: cs.onSurface,
+              ),
+              border: InputBorder.none,
+            ),
+            onChanged: (text) =>
+                ref.read(itemsQueryProvider(widget.listId).notifier).state =
+                    text,
+          )
+        : listAsync.when(
+            data: (l) => Text(l?.title ?? ''),
+            loading: () => const Text('…'),
+            error: (err, stack) => const Text(''),
+          );
+
     return PopScope(
-      // ВАЖНО: системный Back всегда идёт через нашу логику
+      // Всегда перехватываем системную «Назад», чтобы не закрывать приложение.
       canPop: false,
-      onPopInvokedWithResult: (didPop, result) async {
-        if (didPop) return; // если кто-то уже попнул — выходим
-        await _handleSystemBack();
+      onPopInvokedWithResult: (didPop, _) {
+        // 1) Если открыт поиск — закрыть и очистить
+        if (_searchMode) {
+          _toggleSearchMode(ref, clearOnExit: true);
+          return;
+        }
+        // 2) Если есть куда вернуться — обычный pop; иначе — на главный
+        final nav = Navigator.of(context);
+        if (nav.canPop()) {
+          nav.maybePop();
+        } else {
+          context.go('/');
+        }
       },
+
       child: Scaffold(
-        appBar: AppBar(
-          title: listAsync.when(
-            data: (data) => Text(data?.title ?? 'Список'),
-            loading: () => const Text('Загрузка…'),
-            error: (error, stackTrace) => const Text('Ошибка'),
-          ),
-          actions: [
-            IconButton(
-              tooltip: 'Поиск',
-              onPressed: () async {
-                await showSearchBar(context);
-              },
-              icon: const Icon(Icons.search),
-            ),
-          ],
-        ),
-        body: Column(
-          children: [
-            // Быстрое добавление
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _inputController,
-                      focusNode: _focus,
-                      decoration: const InputDecoration(
-                        hintText: 'Новый элемент…',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      onSubmitted: (_) => _addItem(),
-                      textInputAction: TextInputAction.done,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filled(
-                    onPressed: _addItem,
-                    icon: const Icon(Icons.add),
-                  ),
-                ],
-              ),
-            ),
-
-            // Фильтры
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: SegmentedButton<bool?>(
-                segments: const [
-                  ButtonSegment<bool?>(value: null, label: Text('Все')),
-                  ButtonSegment<bool?>(value: false, label: Text('Активные')),
-                  ButtonSegment<bool?>(value: true, label: Text('Выполненные')),
-                ],
-                selected: {_completedFilter},
-                onSelectionChanged: (s) => _setFilter(s.first),
-              ),
-            ),
-
-            // Поиск
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.search),
-                  hintText: 'Поиск…',
-                  isDense: true,
-                  border: const OutlineInputBorder(),
-                  fillColor: Theme.of(
-                    context,
-                  ).colorScheme.surface.withValues(alpha: 0.6),
-                  filled: true,
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            // Список
-            Expanded(
-              child: itemsAsync.when(
-                data: (items) {
-                  if (items.isEmpty) {
-                    return const Center(
-                      child: Text('Нет элементов — добавьте первый'),
-                    );
+        // Переводим экран на NestedScrollView + SliverAppBar с автоскрытием
+        body: NestedScrollView(
+          // Шапка, которая прячется/появляется при прокрутке
+          headerSliverBuilder: (ctx, innerBoxIsScrolled) => [
+            SliverAppBar(
+              // Принудительно показываем стрелку «Назад»
+              automaticallyImplyLeading: false,
+              leading: BackButton(
+                onPressed: () {
+                  final nav = Navigator.of(context);
+                  if (nav.canPop()) {
+                    nav.maybePop();
+                  } else {
+                    context.go('/');
                   }
-                  return ListView.separated(
-                    itemCount: items.length,
-                    separatorBuilder: (context, _) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final it = items[index];
-                      return Dismissible(
-                        key: ValueKey('item_${it.id}'),
-                        background: Container(
-                          alignment: Alignment.centerLeft,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          color: Colors.red.withValues(alpha: 0.12),
-                          child: const Icon(Icons.delete, color: Colors.red),
-                        ),
-                        secondaryBackground: Container(
-                          alignment: Alignment.centerRight,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          color: Colors.red.withValues(alpha: 0.12),
-                          child: const Icon(Icons.delete, color: Colors.red),
-                        ),
-                        confirmDismiss: (_) async {
-                          await _delete(it);
-                          return false;
-                        },
-                        child: CheckboxListTile(
-                          value: it.isDone,
-                          onChanged: (v) => _toggle(it, v ?? false),
-                          title: Text(
-                            it.title,
-                            style: it.isDone
-                                ? const TextStyle(
-                                    decoration: TextDecoration.lineThrough,
+                },
+              ),
+              title: titleWidget,
+              actions: [
+                IconButton(
+                  key: const Key('search_button'),
+                  tooltip: s.commonSearch,
+                  icon: Icon(_searchMode ? Icons.close : Icons.search),
+                  onPressed: () => _toggleSearchMode(ref, clearOnExit: true),
+                ),
+                _FilterSelectorAction(
+                  key: const Key('filter_selector'),
+                  label: filterLabel(currentFilter),
+                  onSelected: (a) {
+                    final notifier = ref.read(
+                      itemsFilterProvider(widget.listId).notifier,
+                    );
+                    switch (a) {
+                      case _FilterAction.all:
+                        notifier.state = const ItemsFilter.all();
+                        break;
+                      case _FilterAction.open:
+                        notifier.state = const ItemsFilter.active();
+                        break;
+                      case _FilterAction.done:
+                        notifier.state = const ItemsFilter.done();
+                        break;
+                    }
+                  },
+                  itemBuilder: (ctx) {
+                    final entries = <PopupMenuEntry<_FilterAction>>[];
+                    final current = currentFilter;
+                    final currentAction = current.completed == true
+                        ? _FilterAction.done
+                        : (current.completed == false
+                              ? _FilterAction.open
+                              : _FilterAction.all);
+                    String labelFor(_FilterAction a) => switch (a) {
+                      _FilterAction.all => s.itemsFilterAll,
+                      _FilterAction.open => s.itemsFilterOpen,
+                      _FilterAction.done => s.itemsFilterDone,
+                    };
+                    for (final a in _FilterAction.values) {
+                      final selected = (a == currentAction);
+                      entries.add(
+                        PopupMenuItem<_FilterAction>(
+                          key: Key(
+                            a == _FilterAction.all
+                                ? 'filter_all'
+                                : a == _FilterAction.open
+                                ? 'filter_open'
+                                : 'filter_done',
+                          ),
+                          value: a,
+                          padding: EdgeInsets.zero,
+                          child: Container(
+                            decoration: selected
+                                ? BoxDecoration(
+                                    color: cs.primary.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(6),
                                   )
                                 : null,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.check,
+                                  size: 18,
+                                  color: selected
+                                      ? cs.primary
+                                      : Colors.transparent,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  labelFor(a),
+                                  style: selected
+                                      ? TextStyle(
+                                          color: cs.primary,
+                                          fontWeight: FontWeight.w600,
+                                        )
+                                      : null,
+                                ),
+                              ],
+                            ),
                           ),
-                          subtitle: it.note?.isNotEmpty == true
-                              ? Text(it.note!)
-                              : null,
-                          controlAffinity: ListTileControlAffinity.leading,
                         ),
                       );
-                    },
-                  );
-                },
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, stackTrace) =>
-                    const Center(child: Text('Ошибка загрузки элементов')),
+                    }
+                    return entries;
+                  },
+                ),
+              ],
+              // Ключевые флаги для автоскрытия
+              floating: true,
+              snap: true,
+              // Переносим QuickAdd в низ шапки, чтобы он скрывался вместе с AppBar
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(64),
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: QuickAddField(
+                      controller: _quickAddController,
+                      focusNode: _quickAddFocus,
+                      textFieldKey: const Key('quick_add_field'),
+                      hintText: s.itemsAddPlaceholder,
+                      onSubmitted: _onQuickAddSubmitted,
+                      // Автофокус сохранён — поле получает фокус при открытии экрана,
+                      // но теперь находится в шапке и будет скрываться/появляться с ней.
+                      autofocus: widget.quickAdd,
+                    ),
+                  ),
+                ),
               ),
+
+              // (не делаем pinned, чтобы шапка полностью исчезала)
+              elevation: 0,
             ),
+          ],
+
+          body: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Expanded(
+                  child: itemsAsync.when(
+                    data: (items) {
+                      if (items.isEmpty) return const EmptyState();
+
+                      Future<void> onReorder(int oldIndex, int newIndex) async {
+                        final ids = items.map((e) => e.id).toList();
+                        if (newIndex > oldIndex) newIndex -= 1;
+                        final moved = ids.removeAt(oldIndex);
+                        ids.insert(newIndex, moved);
+                        await reorderUc(widget.listId, ids);
+                      }
+
+                      Widget buildRow(int index) {
+                        final it = items[index];
+
+                        return Dismissible(
+                          key: ValueKey('dismiss_${it.id}'),
+                          direction: DismissDirection.horizontal,
+                          background: _SwipeBackground(
+                            alignment: Alignment.centerLeft,
+                            color: Colors.blue.shade50,
+                            icon: Icons.edit,
+                            iconColor: Colors.blue,
+                          ),
+                          secondaryBackground: _SwipeBackground(
+                            alignment: Alignment.centerRight,
+                            color: Colors.red.shade50,
+                            icon: Icons.delete,
+                            iconColor: Colors.red,
+                          ),
+                          confirmDismiss: (direction) async {
+                            if (direction == DismissDirection.startToEnd) {
+                              await _onEditTitle(it);
+                              return false;
+                            } else {
+                              return true; // delete
+                            }
+                          },
+                          onDismissed: (direction) {
+                            if (direction == DismissDirection.endToStart) {
+                              _onDeleteWithUndo(it);
+                            }
+                          },
+                          child: Material(
+                            key: ValueKey('item_${it.id}'),
+                            child: ItemTile(
+                              item: it,
+                              itemIndex: index,
+                              dndEnabled: dndEnabled,
+                              onToggle: () => _onToggleItem(it.id),
+                              onDelete: () => _onDeleteWithUndo(it),
+                              focusNode: _focusFor(it.id),
+                            ),
+                          ),
+                        );
+                      }
+
+                      if (dndEnabled) {
+                        return ReorderableListView.builder(
+                          buildDefaultDragHandles: false,
+                          itemCount: items.length,
+                          onReorder: onReorder,
+                          itemBuilder: (context, index) => buildRow(index),
+                        );
+                      } else {
+                        return ListView.builder(
+                          itemCount: items.length,
+                          itemBuilder: (context, index) => buildRow(index),
+                        );
+                      }
+                    },
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
+                    error: (e, _) => Center(child: Text(e.toString())),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+enum _FilterAction { all, open, done }
+
+class _FilterSelectorAction extends StatelessWidget {
+  const _FilterSelectorAction({
+    super.key,
+    required this.label,
+    required this.onSelected,
+    required this.itemBuilder,
+  });
+
+  final String label;
+  final ValueChanged<_FilterAction> onSelected;
+  final PopupMenuItemBuilder<_FilterAction> itemBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final onSurface = theme.colorScheme.onSurface;
+    return PopupMenuButton<_FilterAction>(
+      onSelected: onSelected,
+      itemBuilder: itemBuilder,
+      offset: const Offset(0, kToolbarHeight),
+      tooltip: label,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        child: Row(
+          children: [
+            Text(
+              label,
+              style: theme.textTheme.titleSmall?.copyWith(color: onSurface),
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.arrow_drop_down, color: onSurface),
+            const SizedBox(width: 4),
           ],
         ),
       ),
     );
   }
+}
 
-  Future<void> showSearchBar(BuildContext context) async {
-    await Future<void>.delayed(Duration.zero);
-    if (!context.mounted) return;
-    FocusScope.of(context).requestFocus(_focus);
-    await SystemChannels.textInput.invokeMethod('TextInput.show');
+class _SwipeBackground extends StatelessWidget {
+  const _SwipeBackground({
+    required this.alignment,
+    required this.color,
+    required this.icon,
+    required this.iconColor,
+  });
+
+  final Alignment alignment;
+  final Color color;
+  final IconData icon;
+  final Color iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: color,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      alignment: alignment,
+      child: Icon(icon, color: iconColor, size: 24),
+    );
   }
 }

@@ -223,16 +223,12 @@ class _ListSliver extends ConsumerWidget {
             color: scheme.errorContainer,
             icon: Icons.delete_outline,
             iconColor: scheme.onErrorContainer,
-            label: L10n.t(context, 'common.delete'),
-            labelColor: scheme.onErrorContainer,
           ),
           secondaryBackground: _SwipeBackground(
             alignment: Alignment.centerRight,
             color: scheme.primaryContainer,
             icon: Icons.edit_outlined,
             iconColor: scheme.onPrimaryContainer,
-            label: L10n.t(context, 'common.edit'),
-            labelColor: scheme.onPrimaryContainer,
           ),
           confirmDismiss: (direction) async {
             if (direction == DismissDirection.startToEnd) {
@@ -417,16 +413,12 @@ class _SwipeBackground extends StatelessWidget {
     required this.color,
     required this.icon,
     required this.iconColor,
-    required this.label,
-    required this.labelColor,
   });
 
   final Alignment alignment;
   final Color color;
   final IconData icon;
   final Color iconColor;
-  final String label;
-  final Color labelColor;
 
   @override
   Widget build(BuildContext context) {
@@ -434,20 +426,7 @@ class _SwipeBackground extends StatelessWidget {
       color: color,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       alignment: alignment,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: iconColor),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: labelColor,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
+      child: Icon(icon, color: iconColor, size: 24),
     );
   }
 }

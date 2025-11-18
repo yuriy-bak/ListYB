@@ -10,6 +10,7 @@ class ItemsRepositoryImpl implements ItemsRepository {
   final ItemsDao _dao;
   final AppDatabase _db;
   final Clock _clock;
+
   ItemsRepositoryImpl(this._dao, this._db, this._clock);
 
   @override
@@ -79,7 +80,6 @@ class ItemsRepositoryImpl implements ItemsRepository {
     bool? completed;
     if (onlyDone == true) completed = true;
     if (onlyActive == true) completed = false;
-
     return _dao
         .watchByList(listId, completed: completed)
         .map((rows) => rows.map((r) => r.toEntity()).toList());
@@ -88,4 +88,37 @@ class ItemsRepositoryImpl implements ItemsRepository {
   @override
   Stream<YbItem?> watchOne(int itemId) =>
       _dao.watchOne(itemId).map((r) => r?.toEntity());
+
+  @override
+  Stream<List<YbItem>> watchForListFiltered(
+    int listId, {
+    bool? onlyDone,
+    bool? onlyActive,
+    String? query,
+  }) {
+    bool? completed;
+    if (onlyDone == true) completed = true;
+    if (onlyActive == true) completed = false;
+
+    final q = (query ?? '').trim();
+    final qLower = q.toLowerCase();
+    // Важно: делаем фильтрацию по строке в Dart, чтобы обеспечить
+    // регистронезависимость для Юникода (SQLite/LIKE не всегда корректен для кириллицы).
+    return _dao
+        .watchByList(
+          listId,
+          completed: completed,
+          // не фильтруем по query на уровне БД — фильтруем ниже в Dart
+        )
+        .map((rows) {
+          final items = rows.map((r) => r.toEntity()).toList();
+          if (qLower.isEmpty) return items;
+          return items.where((e) {
+            final title = e.title.toLowerCase();
+            // если у сущности нет note — оставьте только title
+            // final note = (e.note ?? '').toLowerCase();
+            return title.contains(qLower);
+          }).toList();
+        });
+  }
 }
