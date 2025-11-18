@@ -99,6 +99,7 @@ class ListsScreen extends ConsumerWidget {
           controller: controller,
           autofocus: true,
           textInputAction: TextInputAction.done,
+          textCapitalization: TextCapitalization.sentences,
           onSubmitted: (v) => Navigator.of(ctx).pop(controller.text.trim()),
         ),
         actions: [
