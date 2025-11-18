@@ -97,7 +97,8 @@ def main():
     sizes_web     = {'192':192, '512':512}
 
     for k, sz in sizes_android.items():
-        img.resize((sz,sz), Image.LANCZOS).save(os.path.join(OUT_DIR,"android",f"icon-{k}.png"), "PNG")
+        os.makedirs(os.path.join(OUT_DIR,"android",f"mipmap-{k}"), exist_ok=True)
+        img.resize((sz,sz), Image.LANCZOS).save(os.path.join(OUT_DIR,"android",f"mipmap-{k}", "ic_launcher.png"), "PNG")
     for k, sz in sizes_ios.items():
         img.resize((sz,sz), Image.LANCZOS).save(os.path.join(OUT_DIR,"ios",f"icon-{k}.png"), "PNG")
     for k, sz in sizes_web.items():
