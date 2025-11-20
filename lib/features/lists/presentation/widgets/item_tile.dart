@@ -31,7 +31,12 @@ class ItemTile extends StatelessWidget {
         value: item.isDone,
         onChanged: (_) => onToggle(),
       ),
-      title: Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+      title: Text(
+        item.title,
+        softWrap: true,
+        maxLines: null,
+        overflow: TextOverflow.visible,
+      ),
       // Контекстное меню больше не нужно — работаем свайпами на уровне списка
       onLongPress: null,
       trailing: dndEnabled
