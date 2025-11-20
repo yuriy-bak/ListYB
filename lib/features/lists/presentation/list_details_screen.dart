@@ -421,18 +421,18 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
                           direction: DismissDirection.horizontal,
                           background: _SwipeBackground(
                             alignment: Alignment.centerLeft,
-                            color: Colors.blue.shade50,
-                            icon: Icons.edit,
-                            iconColor: Colors.blue,
-                          ),
-                          secondaryBackground: _SwipeBackground(
-                            alignment: Alignment.centerRight,
                             color: Colors.red.shade50,
                             icon: Icons.delete,
                             iconColor: Colors.red,
                           ),
+                          secondaryBackground: _SwipeBackground(
+                            alignment: Alignment.centerRight,
+                            color: Colors.blue.shade50,
+                            icon: Icons.edit,
+                            iconColor: Colors.blue,
+                          ),
                           confirmDismiss: (direction) async {
-                            if (direction == DismissDirection.startToEnd) {
+                            if (direction == DismissDirection.endToStart) {
                               await _onEditTitle(it);
                               return false;
                             } else {
@@ -440,7 +440,7 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
                             }
                           },
                           onDismissed: (direction) {
-                            if (direction == DismissDirection.endToStart) {
+                            if (direction == DismissDirection.startToEnd) {
                               _onDeleteWithUndo(it);
                             }
                           },
