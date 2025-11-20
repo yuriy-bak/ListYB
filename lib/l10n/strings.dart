@@ -14,6 +14,7 @@ class Strings {
   String get commonEdit => 'Редактировать';
   String get commonSave => 'Сохранить';
   String get commonSearch => 'Поиск…';
+  String get commonShare => "Поделиться";
 
   // Items screen
   String get itemsAddPlaceholder => 'Быстро добавить…';

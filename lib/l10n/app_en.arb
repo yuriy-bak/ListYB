@@ -9,7 +9,8 @@
   "common.save": "Save",
   "common.search": "Search",
   "common.settings": "Settings",
-  "common.about": "About"
+  "common.about": "About",
+  "commonShare": "Share",
   "list.create": "Create list",
   "list.rename": "Rename",
   "list.archive": "Archive",

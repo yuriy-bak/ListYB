@@ -10,6 +10,7 @@ import 'package:listyb/features/lists/presentation/widgets/empty_state.dart';
 import 'package:listyb/features/lists/presentation/widgets/item_tile.dart';
 import 'package:listyb/features/lists/presentation/widgets/quick_add_field.dart';
 import 'package:listyb/features/lists/application/items_filter.dart';
+import 'package:share_plus/share_plus.dart';
 
 class ListDetailsScreen extends ConsumerStatefulWidget {
   const ListDetailsScreen({
@@ -366,6 +367,20 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
                     return entries;
                   },
                 ),
+                // ✅ Кнопка «Поделиться»
+                IconButton(
+                  icon: const Icon(Icons.share),
+                  tooltip: s.commonShare,
+                  onPressed: () async {
+                    final list = listAsync.value;
+                    final items = _lastAllItems;
+                    if (list == null || items.isEmpty) return;
+                    final shareText = _generateShareText(list.title, items);
+                    await SharePlus.instance.share(
+                      ShareParams(text: shareText),
+                    );
+                  },
+                ),
               ],
               // Ключевые флаги для автоскрытия
               floating: true,
@@ -483,6 +498,17 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
         ),
       ),
     );
+  }
+
+  // ✅ Генерация текста для «Поделиться»
+  String _generateShareText(String listTitle, List<YbItem> items) {
+    final buffer = StringBuffer();
+    buffer.writeln('List: «$listTitle»\n');
+    for (final item in items) {
+      final status = item.isDone ? '[x]' : '[ ]';
+      buffer.writeln('— $status ${item.title}');
+    }
+    return buffer.toString();
   }
 }
 
