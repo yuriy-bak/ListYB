@@ -375,7 +375,10 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
                     final list = listAsync.value;
                     final items = _lastAllItems;
                     if (list == null || items.isEmpty) return;
-                    final shareText = _generateShareText(list.title, items);
+                    final shareText = _generateShareMarkdownText(
+                      list.title,
+                      items,
+                    );
                     await SharePlus.instance.share(
                       ShareParams(text: shareText),
                     );
@@ -501,9 +504,9 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
   }
 
   // ✅ Генерация текста для «Поделиться»
-  String _generateShareText(String listTitle, List<YbItem> items) {
+  String _generateShareMarkdownText(String listTitle, List<YbItem> items) {
     final buffer = StringBuffer();
-    buffer.writeln('List: «$listTitle»\n');
+    buffer.writeln('# «$listTitle»\n');
     for (final item in items) {
       final status = item.isDone ? '[x]' : '[ ]';
       buffer.writeln('— $status ${item.title}');
