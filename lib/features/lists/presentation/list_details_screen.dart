@@ -506,7 +506,7 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
   // ✅ Генерация текста для «Поделиться»
   String _generateShareMarkdownText(String listTitle, List<YbItem> items) {
     final buffer = StringBuffer();
-    buffer.writeln('# «$listTitle»\n');
+    buffer.writeln('# $listTitle\n');
     for (final item in items) {
       final status = item.isDone ? '[x]' : '[ ]';
       buffer.writeln('— $status ${item.title}');
