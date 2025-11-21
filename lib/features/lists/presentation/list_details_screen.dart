@@ -506,7 +506,7 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
     buffer.writeln('# $listTitle\n');
     for (final item in items) {
       final status = item.isDone ? '[x]' : '[ ]';
-      buffer.writeln('— $status ${item.title}');
+      buffer.writeln('- $status ${item.title}');
     }
     return buffer.toString();
   }
