@@ -375,7 +375,10 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
                     final list = listAsync.value;
                     final items = _lastAllItems;
                     if (list == null || items.isEmpty) return;
-                    final shareText = _generateShareMarkdownText(list.title, items);
+                    final shareText = _generateShareMarkdownText(
+                      list.title,
+                      items,
+                    );
                     await SharePlus.instance.share(
                       ShareParams(text: shareText),
                     );
