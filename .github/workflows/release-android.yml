@@ -14,10 +14,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ✅ Проверка формата тега
+      # ✅ Проверка формата тега: vX.Y.Z+N
       - name: Validate tag format
         run: |
           TAG=${GITHUB_REF#refs/tags/}
@@ -27,7 +27,7 @@ jobs:
             exit 1
           fi
 
-      # ✅ Извлечение версий
+      # ✅ Извлечение версий из тега
       - name: Extract versions
         id: versions
         run: |
@@ -68,15 +68,15 @@ jobs:
       - name: List build files
         run: ls -R build/app/outputs
 
-      # ✅ Публикация релиза
+      # ✅ Публикация релиза (красивый заголовок = 0.1.0)
       - name: Create GitHub Release and upload artifacts
         uses: softprops/action-gh-release@v2
         with:
           files: |
             build/app/outputs/flutter-apk/app-release.apk
             build/app/outputs/bundle/release/app-release.aab
-          name: "${{ steps.versions.outputs.clean }}"   # красивый заголовок
-          tag_name: "${{ github.ref_name }}"            # тег остаётся vX.Y.Z+N
+          name: "${{ steps.versions.outputs.clean }}"
+          tag_name: "${{ github.ref_name }}"
           prerelease: false
           draft: false
           generate_release_notes: true
