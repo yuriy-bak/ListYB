@@ -1,8 +1,8 @@
 name: Android CI
 
 on:
-  push:
-    branches: [ "main" ]
+  # push:
+  #   branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
   workflow_dispatch:
@@ -27,7 +27,7 @@ jobs:
           channel: "stable"
           cache: true
 
-      - name: Flutter pub get
+      - name: Install dependencies
         run: flutter pub get
 
       - name: Format check
@@ -39,8 +39,11 @@ jobs:
       - name: Test
         run: flutter test --reporter=expanded
 
-      - name: Build APK (debug)
-        run: flutter build apk --debug
+      # - name: Build APK (debug)
+      #   run: flutter build apk --debug
+      
+      - name: Build release APK
+        run: flutter build apk --release
 
       # Если есть подпись release, можно включить сборку релиза:
       # - name: Build APK (release)
@@ -49,7 +52,7 @@ jobs:
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: android-apk
+          name: app-release
           path: |
-            build/app/outputs/flutter-apk/app-debug.apk
-            # build/app/outputs/flutter-apk/app-release.apk
+            # build/app/outputs/flutter-apk/app-debug.apk
+            build/app/outputs/flutter-apk/app-release.apk
