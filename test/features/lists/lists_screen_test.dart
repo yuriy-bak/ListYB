@@ -67,8 +67,10 @@ void main() {
     await tester.pump();
     expect(find.text('Список А'), findsOneWidget);
     expect(find.text('Список B'), findsOneWidget);
-    expect(find.text('3/5'), findsOneWidget);
-    expect(find.text('0/0'), findsOneWidget);
+    // expect(find.text('3/5'), findsOneWidget);
+    // expect(find.text('0/0'), findsOneWidget);
+    expect(find.text('3'), findsOneWidget);
+    expect(find.text('0'), findsOneWidget);
   });
 
   testWidgets('Контекстное меню: Архивировать вызывает сервис Undo', (

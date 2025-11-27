@@ -66,7 +66,8 @@ class _Badge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = '$open/$total';
+    // final text = '$open/$total';
+    final text = '$open';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
