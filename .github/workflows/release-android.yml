@@ -75,8 +75,8 @@ jobs:
           files: |
             build/app/outputs/flutter-apk/app-release.apk
             build/app/outputs/bundle/release/app-release.aab
-          name: "${{ steps.versions.outputs.clean }}"
-          tag_name: "${{ github.ref_name }}"
+          name: "${{ steps.versions.outputs.clean }}"   # красивый заголовок
+          tag_name: "${{ github.ref_name }}"            # тег остаётся vX.Y.Z+N
           prerelease: false
           draft: false
           generate_release_notes: true
