@@ -73,7 +73,7 @@ jobs:
           storePassword=${KEYSTORE_PASSWORD}
           keyPassword=${KEY_PASSWORD}
           keyAlias=${KEY_ALIAS}
-          storeFile=app/my-release-key.jks
+          storeFile=app/keystore.jks
           EOF
           echo "✅ key.properties created"
 
