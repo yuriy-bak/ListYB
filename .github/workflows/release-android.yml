@@ -58,6 +58,25 @@ jobs:
       - name: Run tests
         run: flutter test
 
+      
+      - name: Restore keystore & key.properties
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          mkdir -p android/app
+          echo "$KEYSTORE_BASE64" | base64 --decode > android/app/my-release-key.jks
+          cat > android/key.properties << 'EOF'
+          storePassword=${KEYSTORE_PASSWORD}
+          keyPassword=${KEY_PASSWORD}
+          keyAlias=${KEY_ALIAS}
+          storeFile=app/my-release-key.jks
+          EOF
+          echo "✅ key.properties created"
+
       # ✅ Сборка APK
       - name: Build release APK
         run: flutter build apk --release
