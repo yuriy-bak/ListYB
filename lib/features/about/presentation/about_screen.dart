@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:package_info_plus/package_info_plus.dart';
 
 class AboutScreen extends StatefulWidget {
@@ -20,23 +21,23 @@ class _AboutScreenState extends State<AboutScreen> {
     });
   }
 
-  Future<void> _showLicenseDialog() async {
-    final licenseText = await DefaultAssetBundle.of(
-      context,
-    ).loadString('LICENSE.md');
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Лицензия'),
-        content: SingleChildScrollView(child: Text(licenseText)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Закрыть'),
-          ),
-        ],
-      ),
-    );
+  void _showLicenseDialog() {
+    rootBundle.loadString('LICENSE.md').then((licenseText) {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Лицензия'),
+          content: SingleChildScrollView(child: Text(licenseText)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Закрыть'),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   @override
