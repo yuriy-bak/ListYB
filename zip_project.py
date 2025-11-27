@@ -57,9 +57,14 @@ def get_included_files(repo_root: str) -> list[str]:
 
 
 def default_zip_name(repo_root: str) -> str:
-    folder = os.path.basename(os.path.normpath(repo_root))
+
+    folder = main_folder_name(repo_root)
     ts = dt.datetime.now().strftime("%Y%m%d-%H%M")
     return f"{folder}-{ts}.zip"
+
+def main_folder_name(repo_root):
+    folder = os.path.basename(os.path.normpath(repo_root))
+    return folder
 
 
 def main():
@@ -83,7 +88,9 @@ def main():
         fail("Список файлов пуст. Возможно, всё проигнорировано .gitignore или ты не в корне проекта.")
 
     # Папка вывода архивов
-    out_dir_abs = os.path.join(repo_root, args.out_dir)
+    # out_dir_abs = os.path.join(repo_root, args.out_dir)
+    parent_dir = os.path.dirname(repo_root)  # Получаем родительский каталог: c:\git
+    out_dir_abs = os.path.join(parent_dir, "archives", main_folder_name(repo_root))  # Добавляем новый каталог
     os.makedirs(out_dir_abs, exist_ok=True)
 
     # Имя архива
@@ -129,7 +136,7 @@ def main():
         fail(f"Не удалось создать tsv-копию: {e}")
 
     # Открыть папку с архивами (по желанию)
-    if args.open_folder and os.name == "nt":
+    if args.open_folder and os.name == "nt" or True:
         try:
             os.startfile(out_dir_abs)  # только Windows
         except Exception:
