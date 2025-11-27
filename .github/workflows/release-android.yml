@@ -11,8 +11,13 @@ permissions:
 
 jobs:
   release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Setup Flutter
-        runs-on: ubuntu-latest
         uses: subosito/flutter-action@v2
         with:
           flutter-version: 'stable'
@@ -29,19 +34,18 @@ jobs:
       - name: Build release APK
         run: flutter build apk --release
 
+      - name: List build files (debugging)
+        run: ls -R build/app/outputs
+
       - name: Create GitHub Release and upload APK
         uses: softprops/action-gh-release@v2
         with:
-          files: build/app/outputs/flutter-apk/app-release.apk
-          name: "${{ github.ref_name }}"      # заголовок релиза = имя тега (например v0.1.0+1)
+          files: |
+            build/app/outputs/flutter-apk/app-release.apk
+          name: "${{ github.ref_name }}"      # заголовок релиза = имя тега
           tag_name: "${{ github.ref_name }}"  # тот же тег
           prerelease: false
           draft: false
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
