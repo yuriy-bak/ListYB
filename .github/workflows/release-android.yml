@@ -7,7 +7,7 @@ on:
       - 'v*'   # запуск при пуше тега, например v0.1.0+1
 
 permissions:
-  contents: write  # нужно для создания релиза и загрузки assets
+  contents: write
 
 jobs:
   release:
@@ -16,6 +16,32 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      # ✅ Проверка формата тега
+      - name: Validate tag format
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          if [[ ! $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+$ ]]; then
+            echo "❌ Invalid tag format: $TAG"
+            echo "✅ Expected format: vX.Y.Z+N (example: v0.1.0+1)"
+            exit 1
+          fi
+
+      # ✅ Извлечение версий
+      - name: Extract versions
+        id: versions
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          FULL=${TAG#v}
+          CLEAN=${FULL%%+*}
+          echo "full=$FULL" >> $GITHUB_OUTPUT
+          echo "clean=$CLEAN" >> $GITHUB_OUTPUT
+
+      # ✅ Обновление pubspec.yaml
+      - name: Update pubspec.yaml version
+        run: |
+          sed -i "s/^version:.*/version: ${{ steps.versions.outputs.full }}/" pubspec.yaml
+          grep version pubspec.yaml
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -31,19 +57,26 @@ jobs:
       - name: Run tests
         run: flutter test
 
+      # ✅ Сборка APK
       - name: Build release APK
         run: flutter build apk --release
 
-      - name: List build files (debugging)
+      # ✅ Сборка AAB
+      - name: Build release AAB
+        run: flutter build appbundle --release
+
+      - name: List build files
         run: ls -R build/app/outputs
 
-      - name: Create GitHub Release and upload APK
+      # ✅ Публикация релиза
+      - name: Create GitHub Release and upload artifacts
         uses: softprops/action-gh-release@v2
         with:
           files: |
             build/app/outputs/flutter-apk/app-release.apk
-          name: "${{ github.ref_name }}"      # заголовок релиза = имя тега
-          tag_name: "${{ github.ref_name }}"  # тот же тег
+            build/app/outputs/bundle/release/app-release.aab
+          name: "${{ steps.versions.outputs.clean }}"   # красивый заголовок
+          tag_name: "${{ github.ref_name }}"            # тег остаётся vX.Y.Z+N
           prerelease: false
           draft: false
           generate_release_notes: true
