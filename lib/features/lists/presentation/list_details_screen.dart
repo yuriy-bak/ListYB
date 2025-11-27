@@ -11,6 +11,7 @@ import 'package:listyb/features/lists/presentation/widgets/item_tile.dart';
 import 'package:listyb/features/lists/presentation/widgets/quick_add_field.dart';
 import 'package:listyb/features/lists/application/items_filter.dart';
 import 'package:share_plus/share_plus.dart';
+import 'list_share_import.dart';
 
 class ListDetailsScreen extends ConsumerStatefulWidget {
   const ListDetailsScreen({
@@ -41,6 +42,8 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
 
   List<YbItem> _lastAllItems = const [];
   final Map<int, FocusNode> _itemFocus = {};
+  bool _importInProgress = false;
+
   FocusNode _focusFor(int id) => _itemFocus.putIfAbsent(id, () => FocusNode());
 
   @override
@@ -188,6 +191,111 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
         _searchFocus.unfocus();
       }
     });
+  }
+
+  Future<void> _showImportDialog() async {
+    if (_importInProgress) return;
+    final s = Strings.of(context);
+    bool replaceTitle = true;
+    bool clearBefore = false;
+    final textCtrl = TextEditingController();
+
+    final markdown = await showDialog<String>(
+      context: context,
+
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Импорт из Markdown'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: textCtrl,
+                autofocus: true,
+                maxLines: 12,
+                minLines: 6,
+                decoration: const InputDecoration(
+                  hintText:
+                      '# Заголовок\n- [ ] Элемент\n\nАбзац без маркера → элемент (не выполнен)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              CheckboxListTile(
+                value: replaceTitle,
+                onChanged: (v) => setState(() => replaceTitle = v ?? true),
+                title: const Text(
+                  'Заменить название списка заголовком из Markdown',
+                ),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+              ),
+              CheckboxListTile(
+                value: clearBefore,
+                onChanged: (v) => setState(() => clearBefore = v ?? false),
+                title: const Text('Очистить текущие элементы перед импортом'),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ],
+          ),
+
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(s.commonCancel),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(textCtrl.text),
+              child: const Text('Импорт'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (markdown == null || markdown.trim().isEmpty) return;
+    final parsed = parseShareMarkdown(markdown);
+
+    if (parsed.hasMultipleLists) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'В файле обнаружено несколько заголовков списков.\nТекущая версия поддерживает только один список.',
+          ),
+          duration: Duration(seconds: 4),
+        ),
+      );
+      return;
+    }
+
+    final addUc = ref.read(addItemUcProvider);
+    final toggleUc = ref.read(toggleItemUcProvider);
+    setState(() => _importInProgress = true);
+    try {
+      if (clearBefore && _lastAllItems.isNotEmpty) {
+        final deleteUc = ref.read(deleteItemUcProvider);
+        for (final it in _lastAllItems) {
+          await deleteUc(it.id);
+        }
+      }
+
+      for (final it in parsed.items) {
+        final newId = await addUc(widget.listId, it.title);
+        if (it.isDone) await toggleUc(newId);
+      }
+
+      if (replaceTitle && parsed.hasTitle) {
+        final renameList = ref.read(renameListUcProvider);
+        await renameList(widget.listId, parsed.title!);
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Импортировано: ${parsed.items.length}')),
+      );
+    } finally {}
   }
 
   @override
@@ -375,7 +483,7 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
                     final list = listAsync.value;
                     final items = _lastAllItems;
                     if (list == null || items.isEmpty) return;
-                    final shareText = _generateShareMarkdownText(
+                    final shareText = generateShareMarkdownText(
                       list.title,
                       items,
                     );
@@ -383,6 +491,24 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
                       ShareParams(text: shareText),
                     );
                   },
+                ),
+
+                // ✅ Меню «Ещё» с пунктом Импорт
+                PopupMenuButton<_MoreAction>(
+                  tooltip: 'Меню',
+                  onSelected: (a) {
+                    switch (a) {
+                      case _MoreAction.import:
+                        _showImportDialog();
+                        break;
+                    }
+                  },
+                  itemBuilder: (ctx) => [
+                    const PopupMenuItem<_MoreAction>(
+                      value: _MoreAction.import,
+                      child: Text('Импорт из Markdown'),
+                    ),
+                  ],
                 ),
               ],
               // Ключевые флаги для автоскрытия
@@ -502,20 +628,11 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
       ),
     );
   }
-
-  // ✅ Генерация текста для «Поделиться»
-  String _generateShareMarkdownText(String listTitle, List<YbItem> items) {
-    final buffer = StringBuffer();
-    buffer.writeln('# $listTitle\n');
-    for (final item in items) {
-      final status = item.isDone ? '[x]' : '[ ]';
-      buffer.writeln('- $status ${item.title}');
-    }
-    return buffer.toString();
-  }
 }
 
 enum _FilterAction { all, open, done }
+
+enum _MoreAction { import }
 
 class _FilterSelectorAction extends StatelessWidget {
   const _FilterSelectorAction({
