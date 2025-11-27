@@ -53,7 +53,9 @@ void main() {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: MaterialApp(home: ListDetailsScreen(listId: listId)),
+          child: MaterialApp(
+            home: Scaffold(body: ListDetailsScreen(listId: listId)),
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -146,11 +148,19 @@ void main() {
 
       // Удаление теперь жестом (свайп влево)
       final firstTile = find.byType(ListTile).first;
-      await tester.drag(firstTile, const Offset(-400, 0));
+      await tester.drag(firstTile, const Offset(400, 0));
       await tester.pumpAndSettle();
 
       // Нажимаем «Отменить» в SnackBar (локализовано как «Отменить»)
-      await tester.tap(find.text('Отменить'));
+      if (tester.any(find.byType(SnackBar)) == false) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+
+      // Теперь ищем кнопку Undo
+      final undoAction = find.byType(SnackBarAction);
+      expect(undoAction, findsOneWidget);
+      await tester.tap(undoAction);
+
       await tester.pumpAndSettle(const Duration(seconds: 1));
 
       expect(find.byType(ListTile), findsNWidgets(3));
