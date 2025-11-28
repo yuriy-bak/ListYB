@@ -315,6 +315,7 @@ class _BodySliver extends ConsumerWidget {
     Timer? uiTimer;
     int secondsLeft = 5;
     bool decided = false;
+    bool timersStarted = false;
 
     void cleanupTimers() {
       autoTimer?.cancel();
@@ -328,10 +329,6 @@ class _BodySliver extends ConsumerWidget {
       if (!completer.isCompleted) completer.complete(result);
       if (navigator.canPop()) navigator.pop(result);
     }
-
-    autoTimer = Timer(const Duration(seconds: 5), () {
-      decide(true);
-    });
 
     return showDialog<bool>(
       context: context,
@@ -349,6 +346,13 @@ class _BodySliver extends ConsumerWidget {
                     }
                   })
                 : null;
+
+            if (!timersStarted) {
+              timersStarted = true;
+              autoTimer = Timer(const Duration(seconds: 5), () {
+                decide(true);
+              });
+            }
 
             final deleteLabelBase = L10n.t(ctx, 'common.delete');
             final deleteLabel = showCountdownOnButton

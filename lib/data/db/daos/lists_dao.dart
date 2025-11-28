@@ -31,6 +31,18 @@ class ListsDao extends DatabaseAccessor<AppDatabase> with _$ListsDaoMixin {
   Future<ListsTableData> getById(int id) =>
       (select(listsTable)..where((t) => t.id.equals(id))).getSingle();
 
+  Future<List<ListsTableData>> getAllOrdered({bool includeArchived = false}) {
+    final q = select(listsTable)
+      ..orderBy([
+        (t) => OrderingTerm.asc(t.sortOrder),
+        (t) => OrderingTerm.asc(t.id),
+      ]);
+    if (!includeArchived) {
+      q.where((t) => t.archived.equals(false));
+    }
+    return q.get();
+  }
+
   /// Обновить заголовок; вернуть число изменённых строк
   Future<int> updateTitle(int id, String title) {
     final now = DateTime.now();
