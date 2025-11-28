@@ -2,13 +2,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import 'package:listyb/features/lists/presentation/lists_screen.dart';
 import 'package:listyb/di/stream_providers.dart';
 import 'package:listyb/features/common/undo/undo_snackbar_service.dart';
 import 'package:listyb/domain/entities/yb_list.dart';
 import 'package:listyb/domain/entities/yb_counts.dart';
 import 'package:listyb/features/lists/presentation/widgets/list_actions_menu.dart';
+
+// ✅ ДОБАВЛЕНО
+import 'package:listyb/di/database_providers.dart';
+import 'package:listyb/data/db/app_database.dart' as db;
+import 'package:drift/drift.dart' as drift;
 
 void main() {
   testWidgets('Пустое состояние отображается', (tester) async {
@@ -23,12 +27,11 @@ void main() {
         child: const MaterialApp(home: ListsScreen()),
       ),
     );
-
     await tester.pump(); // загрузка
     expect(find.text('Нет списков — создайте первый'), findsOneWidget);
   });
 
-  testWidgets('Список карточек и бейджи open/total', (tester) async {
+  testWidgets('Список карточек и бейджи open', (tester) async {
     final lists = <YbList>[
       YbList(
         id: 1,
@@ -51,7 +54,6 @@ void main() {
       1: const YbCounts(total: 5, active: 3, done: 2),
       2: const YbCounts(total: 0, active: 0, done: 0),
     };
-
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -63,12 +65,9 @@ void main() {
         child: const MaterialApp(home: ListsScreen()),
       ),
     );
-
     await tester.pump();
     expect(find.text('Список А'), findsOneWidget);
     expect(find.text('Список B'), findsOneWidget);
-    // expect(find.text('3/5'), findsOneWidget);
-    // expect(find.text('0/0'), findsOneWidget);
     expect(find.text('3'), findsOneWidget);
     expect(find.text('0'), findsOneWidget);
   });
@@ -89,7 +88,6 @@ void main() {
     final counts = <int, YbCounts>{
       1: const YbCounts(total: 2, active: 1, done: 1),
     };
-
     final calls = <String>[];
     final fakeUndoProvider = undoServiceProvider.overrideWithValue(
       _FakeUndoService(
@@ -101,7 +99,6 @@ void main() {
         },
       ),
     );
-
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -114,26 +111,17 @@ void main() {
         child: const MaterialApp(home: ListsScreen()),
       ),
     );
-
     await tester.pump();
-
-    // Долгий тап по карточке (чтобы открыть PopupMenu)
     final tile = find.text('Work');
     expect(tile, findsOneWidget);
-
-    // Получим координату для longPress
     final box = tester.firstRenderObject<RenderBox>(tile);
     final pos = box.localToGlobal(Offset.zero) + const Offset(10, 10);
-
     await tester.longPressAt(pos);
     await tester.pumpAndSettle();
-
-    // Выбираем "Архивировать" именно в PopupMenuItem
     await tester.tap(
       find.widgetWithText(PopupMenuItem<ListAction>, 'Архивировать'),
     );
     await tester.pumpAndSettle();
-
     expect(calls, contains('archive:1:true'));
   });
 
@@ -153,7 +141,6 @@ void main() {
     final counts = <int, YbCounts>{
       42: const YbCounts(total: 1, active: 1, done: 0),
     };
-
     final calls = <String>[];
     final fakeUndoProvider = undoServiceProvider.overrideWithValue(
       _FakeUndoService(
@@ -163,7 +150,6 @@ void main() {
         },
       ),
     );
-
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -176,21 +162,14 @@ void main() {
         child: const MaterialApp(home: ListsScreen()),
       ),
     );
-
     await tester.pump();
-
-    // Открыть контекстное меню
     final tile = find.text('To delete');
     final box = tester.firstRenderObject<RenderBox>(tile);
     final pos = box.localToGlobal(Offset.zero) + const Offset(10, 10);
     await tester.longPressAt(pos);
     await tester.pumpAndSettle();
-
-    // Нажать "Удалить" в PopupMenuItem
     await tester.tap(find.widgetWithText(PopupMenuItem<ListAction>, 'Удалить'));
     await tester.pumpAndSettle();
-
-    // Диалог: нажать кнопку "Удалить (N)" (а не заголовок)
     final deleteText = find.byWidgetPredicate(
       (w) => w is Text && (w.data?.startsWith('Удалить') ?? false),
     );
@@ -200,8 +179,6 @@ void main() {
     );
     await tester.tap(deleteButton);
     await tester.pumpAndSettle();
-
-    // Проверяем, что сервис удаления вызван
     expect(calls, contains('delete:42'));
   });
 
@@ -221,7 +198,6 @@ void main() {
     final counts = <int, YbCounts>{
       99: const YbCounts(total: 10, active: 7, done: 3),
     };
-
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -233,17 +209,12 @@ void main() {
         child: const MaterialApp(home: ListsScreen()),
       ),
     );
-
     await tester.pumpAndSettle();
     final titleFinder = find.text(longTitle);
     expect(titleFinder, findsOneWidget);
-
-    // Проверим, что это Text без ограничения по строкам
     final textWidget = tester.widget<Text>(titleFinder);
     expect(textWidget.maxLines, isNull);
     expect(textWidget.softWrap, isTrue);
-
-    // Высота карточки должна быть больше базовой высоты однострочного айтема
     final cardFinder = find.ancestor(
       of: titleFinder,
       matching: find.byType(Card),
@@ -251,14 +222,61 @@ void main() {
     final size = tester.getSize(cardFinder);
     expect(size.height, greaterThan(72));
   });
+
+  // ✅ Новый тест для сортировки
+  testWidgets('Перетаскивание меняет порядок и сохраняется в БД', (
+    tester,
+  ) async {
+    final memoryDb = db.makeInMemoryDb();
+    final container = ProviderContainer(
+      overrides: [appDatabaseProvider.overrideWithValue(memoryDb)],
+    );
+    final listsDao = container.read(listsDaoProvider);
+
+    final now = DateTime.now();
+    await listsDao.insertList(
+      db.ListsTableCompanion.insert(
+        title: 'A',
+        archived: const drift.Value(false),
+        sortOrder: const drift.Value(0),
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    await listsDao.insertList(
+      db.ListsTableCompanion.insert(
+        title: 'B',
+        archived: const drift.Value(false),
+        sortOrder: const drift.Value(1),
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: ListsScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    var snapshot = await listsDao.watchAll().first;
+    expect(snapshot.map((e) => e.title).toList(), ['A', 'B']);
+
+    final dragHandle = find.byIcon(Icons.drag_handle).first;
+    await tester.drag(dragHandle, const Offset(0, 100));
+    await tester.pumpAndSettle();
+
+    snapshot = await listsDao.watchAll().first;
+    expect(snapshot.map((e) => e.title).toList(), ['B', 'A']);
+  });
 }
 
 class _FakeUndoService implements UndoSnackbarService {
   _FakeUndoService({required this.onArchive, required this.onDelete});
-
   final void Function(int listId, bool archived) onArchive;
   final void Function(int listId) onDelete;
-
   @override
   Future<void> archiveWithUndo({
     required BuildContext context,
