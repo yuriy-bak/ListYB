@@ -39,13 +39,7 @@ class ItemTile extends StatelessWidget {
       ),
       // Контекстное меню больше не нужно — работаем свайпами на уровне списка
       onLongPress: null,
-      trailing: dndEnabled
-          ? ReorderableDragStartListener(
-              key: Key('drag_${item.id}'),
-              index: itemIndex, // значение индекса игнорируется с builder’ом
-              child: const Icon(Icons.drag_handle),
-            )
-          : null,
+      trailing: null,
     );
 
     // Оборачиваем в Focus, чтобы элемент мог получать фокус (без клавиатуры)

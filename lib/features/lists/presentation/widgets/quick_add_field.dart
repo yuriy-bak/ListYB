@@ -71,7 +71,7 @@ class _QuickAddFieldState extends State<QuickAddField> {
         ),
         suffixIcon: _isComposing
             ? IconButton(
-                icon: const Icon(Icons.add_circle_outline),
+                icon: const Icon(Icons.playlist_add),
                 color: cs.primary,
                 onPressed: () => _handleSubmitted(widget.controller.text),
               )

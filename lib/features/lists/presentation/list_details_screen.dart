@@ -220,7 +220,7 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
                   border: OutlineInputBorder(),
                 ),
               ),
-              const SizedBox(height: 12),
+              // const SizedBox(height: 12),
               CheckboxListTile(
                 value: replaceTitle,
                 onChanged: (v) => setState(() => replaceTitle = v ?? true),
@@ -309,6 +309,7 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
     final dndEnabled = ref.watch(dndEnabledForListProvider(widget.listId));
     final reorderUc = ref.read(reorderItemsUcProvider);
     final listAsync = ref.watch(watchListStreamProvider(widget.listId));
+    final countsAsync = ref.watch(watchCountsProvider(widget.listId));
 
     final s = Strings.of(context);
     final theme = Theme.of(context);
@@ -320,32 +321,6 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
       if (f.completed == false) return s.itemsFilterOpen;
       return s.itemsFilterAll;
     }
-
-    final titleWidget = _searchMode
-        ? TextField(
-            key: const Key('search_field'),
-            controller: _searchController,
-            focusNode: _searchFocus,
-            autofocus: true,
-            textInputAction: TextInputAction.search,
-            style: theme.textTheme.titleMedium?.copyWith(color: cs.onSurface),
-            cursorColor: cs.onSurface,
-            decoration: InputDecoration(
-              hintText: s.commonSearch,
-              hintStyle: theme.textTheme.titleMedium?.copyWith(
-                color: cs.onSurface,
-              ),
-              border: InputBorder.none,
-            ),
-            onChanged: (text) =>
-                ref.read(itemsQueryProvider(widget.listId).notifier).state =
-                    text,
-          )
-        : listAsync.when(
-            data: (l) => Text(l?.title ?? ''),
-            loading: () => const Text('…'),
-            error: (err, stack) => const Text(''),
-          );
 
     return PopScope(
       // Всегда перехватываем системную «Назад», чтобы не закрывать приложение.
@@ -366,13 +341,12 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
       },
 
       child: Scaffold(
-        // Переводим экран на NestedScrollView + SliverAppBar с автоскрытием
         body: NestedScrollView(
-          // Шапка, которая прячется/появляется при прокрутке
           headerSliverBuilder: (ctx, innerBoxIsScrolled) => [
             SliverAppBar(
               // Принудительно показываем стрелку «Назад»
               automaticallyImplyLeading: false,
+              toolbarHeight: 44,
               leading: BackButton(
                 onPressed: () {
                   final nav = Navigator.of(context);
@@ -383,160 +357,106 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
                   }
                 },
               ),
-              title: titleWidget,
-              actions: [
-                IconButton(
-                  key: const Key('search_button'),
-                  tooltip: s.commonSearch,
-                  icon: Icon(_searchMode ? Icons.close : Icons.search),
-                  onPressed: () => _toggleSearchMode(ref, clearOnExit: true),
-                ),
-                _FilterSelectorAction(
-                  key: const Key('filter_selector'),
-                  label: filterLabel(currentFilter),
-                  onSelected: (a) {
-                    final notifier = ref.read(
-                      itemsFilterProvider(widget.listId).notifier,
-                    );
-                    switch (a) {
-                      case _FilterAction.all:
-                        notifier.state = const ItemsFilter.all();
-                        break;
-                      case _FilterAction.open:
-                        notifier.state = const ItemsFilter.active();
-                        break;
-                      case _FilterAction.done:
-                        notifier.state = const ItemsFilter.done();
-                        break;
-                    }
-                  },
-                  itemBuilder: (ctx) {
-                    final entries = <PopupMenuEntry<_FilterAction>>[];
-                    final current = currentFilter;
-                    final currentAction = current.completed == true
-                        ? _FilterAction.done
-                        : (current.completed == false
-                              ? _FilterAction.open
-                              : _FilterAction.all);
-                    String labelFor(_FilterAction a) => switch (a) {
-                      _FilterAction.all => s.itemsFilterAll,
-                      _FilterAction.open => s.itemsFilterOpen,
-                      _FilterAction.done => s.itemsFilterDone,
-                    };
-                    for (final a in _FilterAction.values) {
-                      final selected = (a == currentAction);
-                      entries.add(
-                        PopupMenuItem<_FilterAction>(
-                          key: Key(
-                            a == _FilterAction.all
-                                ? 'filter_all'
-                                : a == _FilterAction.open
-                                ? 'filter_open'
-                                : 'filter_done',
-                          ),
-                          value: a,
-                          padding: EdgeInsets.zero,
-                          child: Container(
-                            decoration: selected
-                                ? BoxDecoration(
-                                    color: cs.primary.withValues(alpha: 0.08),
-                                    borderRadius: BorderRadius.circular(6),
-                                  )
-                                : null,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 10,
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.check,
-                                  size: 18,
-                                  color: selected
-                                      ? cs.primary
-                                      : Colors.transparent,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  labelFor(a),
-                                  style: selected
-                                      ? TextStyle(
-                                          color: cs.primary,
-                                          fontWeight: FontWeight.w600,
-                                        )
-                                      : null,
-                                ),
-                              ],
+              title: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  listAsync.when(
+                    data: (l) => Text(l?.title ?? ''),
+                    loading: () => const Text('…'),
+                    error: (e, _) => const Text(''),
+                  ),
+                  countsAsync.when(
+                    data: (c) => Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: '${c.active}',
+                            style: TextStyle(
+                              color: cs.primary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
                             ),
                           ),
-                        ),
-                      );
-                    }
-                    return entries;
-                  },
-                ),
-                // ✅ Кнопка «Поделиться»
-                IconButton(
-                  icon: const Icon(Icons.share),
-                  tooltip: s.commonShare,
-                  onPressed: () async {
-                    final list = listAsync.value;
-                    final items = _lastAllItems;
-                    if (list == null || items.isEmpty) return;
-                    final shareText = generateShareMarkdownText(
-                      list.title,
-                      items,
-                    );
-                    await SharePlus.instance.share(
-                      ShareParams(text: shareText),
-                    );
-                  },
-                ),
-
-                // ✅ Меню «Ещё» с пунктом Импорт
-                PopupMenuButton<_MoreAction>(
-                  tooltip: 'Меню',
-                  onSelected: (a) {
-                    switch (a) {
-                      case _MoreAction.import:
-                        _showImportDialog();
-                        break;
-                    }
-                  },
-                  itemBuilder: (ctx) => [
-                    const PopupMenuItem<_MoreAction>(
-                      value: _MoreAction.import,
-                      child: Text('Импорт из Markdown'),
+                          const TextSpan(text: ' / '),
+                          TextSpan(
+                            text: '${c.total}',
+                            style: TextStyle(
+                              color: cs.onSurfaceVariant,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
+                        style: TextStyle(fontSize: 16),
+                      ),
                     ),
-                  ],
-                ),
-              ],
+                    loading: () => const SizedBox.shrink(),
+                    error: (e, _) => const SizedBox.shrink(),
+                  ),
+                ],
+              ),
+              actions: [],
               // Ключевые флаги для автоскрытия
               floating: true,
               snap: true,
-              // Переносим QuickAdd в низ шапки, чтобы он скрывался вместе с AppBar
-              bottom: PreferredSize(
-                preferredSize: const Size.fromHeight(64),
-                child: SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                    child: QuickAddField(
-                      controller: _quickAddController,
-                      focusNode: _quickAddFocus,
-                      textFieldKey: const Key('quick_add_field'),
-                      hintText: s.itemsAddPlaceholder,
-                      onSubmitted: _onQuickAddSubmitted,
-                      // Автофокус сохранён — поле получает фокус при открытии экрана,
-                      // но теперь находится в шапке и будет скрываться/появляться с ней.
-                      autofocus: widget.quickAdd,
-                    ),
-                  ),
-                ),
-              ),
-
-              // (не делаем pinned, чтобы шапка полностью исчезала)
+              pinned: true,
               elevation: 0,
+            ),
+            SliverPersistentHeader(
+              // pinned: true,
+              floating: true,
+              delegate: _SearchHeaderDelegate(
+                searchController: _searchController,
+                searchFocus: _searchFocus,
+                searchMode: _searchMode,
+                onToggleSearch: () {
+                  if (_searchController.text.isNotEmpty) {
+                    _searchController.clear();
+                    ref.read(itemsQueryProvider(widget.listId).notifier).state =
+                        '';
+                  } else {
+                    _searchFocus.requestFocus();
+                  }
+                  setState(() {});
+                },
+                onSearchChanged: (text) =>
+                    ref.read(itemsQueryProvider(widget.listId).notifier).state =
+                        text,
+                searchHint: s.commonSearch,
+                filterLabel: filterLabel(currentFilter),
+                onFilterSelected: (a) {
+                  final notifier = ref.read(
+                    itemsFilterProvider(widget.listId).notifier,
+                  );
+                  switch (a) {
+                    case _FilterAction.all:
+                      notifier.state = const ItemsFilter.all();
+                      break;
+                    case _FilterAction.open:
+                      notifier.state = const ItemsFilter.active();
+                      break;
+                    case _FilterAction.done:
+                      notifier.state = const ItemsFilter.done();
+                      break;
+                  }
+                },
+                onShare: () async {
+                  final list = listAsync.value;
+                  final items = _lastAllItems;
+                  if (list == null || items.isEmpty) return;
+                  final shareText = generateShareMarkdownText(
+                    list.title,
+                    items,
+                  );
+                  await SharePlus.instance.share(ShareParams(text: shareText));
+                },
+                onImport: _showImportDialog,
+                quickAddController: _quickAddController,
+                quickAddFocus: _quickAddFocus,
+                onQuickAddSubmitted: _onQuickAddSubmitted,
+                quickAddHint: s.itemsAddPlaceholder,
+                quickAddAutofocus: widget.quickAdd,
+                quickAddTextFieldKey: const Key('quick_add_field'),
+              ),
             ),
           ],
 
@@ -604,10 +524,18 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
 
                       if (dndEnabled) {
                         return ReorderableListView.builder(
-                          buildDefaultDragHandles: false,
                           itemCount: items.length,
                           onReorder: onReorder,
-                          itemBuilder: (context, index) => buildRow(index),
+                          itemBuilder: (context, index) {
+                            final it = items[index];
+                            return ReorderableDragStartListener(
+                              key: ValueKey('item_${it.id}'),
+                              index: index,
+                              child: buildRow(
+                                index,
+                              ), // внутри уже Dismissible + ItemTile
+                            );
+                          },
                         );
                       } else {
                         return ListView.builder(
@@ -632,47 +560,6 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
 
 enum _FilterAction { all, open, done }
 
-enum _MoreAction { import }
-
-class _FilterSelectorAction extends StatelessWidget {
-  const _FilterSelectorAction({
-    super.key,
-    required this.label,
-    required this.onSelected,
-    required this.itemBuilder,
-  });
-
-  final String label;
-  final ValueChanged<_FilterAction> onSelected;
-  final PopupMenuItemBuilder<_FilterAction> itemBuilder;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final onSurface = theme.colorScheme.onSurface;
-    return PopupMenuButton<_FilterAction>(
-      onSelected: onSelected,
-      itemBuilder: itemBuilder,
-      offset: const Offset(0, kToolbarHeight),
-      tooltip: label,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6),
-        child: Row(
-          children: [
-            Text(
-              label,
-              style: theme.textTheme.titleSmall?.copyWith(color: onSurface),
-            ),
-            const SizedBox(width: 4),
-            Icon(Icons.arrow_drop_down, color: onSurface),
-            const SizedBox(width: 4),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _SwipeBackground extends StatelessWidget {
   const _SwipeBackground({
     required this.alignment,
@@ -695,4 +582,173 @@ class _SwipeBackground extends StatelessWidget {
       child: Icon(icon, color: iconColor, size: 24),
     );
   }
+}
+
+class _SearchHeaderDelegate extends SliverPersistentHeaderDelegate {
+  _SearchHeaderDelegate({
+    required this.searchController,
+    required this.searchFocus,
+    required this.searchMode,
+    required this.onToggleSearch,
+    required this.onSearchChanged,
+    required this.searchHint,
+    required this.filterLabel,
+    required this.onFilterSelected,
+    required this.onShare,
+    required this.onImport,
+    required this.quickAddController,
+    required this.quickAddFocus,
+    required this.onQuickAddSubmitted,
+    required this.quickAddHint,
+    required this.quickAddAutofocus,
+    required this.quickAddTextFieldKey,
+  });
+
+  final TextEditingController searchController;
+  final FocusNode searchFocus;
+  final bool searchMode;
+  final VoidCallback onToggleSearch;
+  final ValueChanged<String> onSearchChanged;
+  final String searchHint;
+  final String filterLabel;
+  final ValueChanged<_FilterAction> onFilterSelected;
+  final VoidCallback onShare;
+  final VoidCallback onImport;
+  final TextEditingController quickAddController;
+  final FocusNode quickAddFocus;
+  final ValueChanged<String> onQuickAddSubmitted;
+  final String quickAddHint;
+  final bool quickAddAutofocus;
+  final Key quickAddTextFieldKey;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Material(
+      color: cs.surface,
+      elevation: overlapsContent ? 2 : 0,
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      key: const Key('search_field'),
+                      controller: searchController,
+                      focusNode: searchFocus,
+                      autofocus: true,
+                      textInputAction: TextInputAction.search,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: cs.onSurface,
+                      ),
+                      cursorColor: cs.onSurface,
+                      decoration: InputDecoration(
+                        hintText: searchHint,
+                        hintStyle: theme.textTheme.titleMedium?.copyWith(
+                          color: cs.onSurface,
+                        ),
+                        border: InputBorder.none,
+                      ),
+                      onChanged: onSearchChanged,
+                    ),
+                  ),
+                  IconButton(
+                    key: const Key('search_button'),
+                    tooltip: searchHint,
+                    icon: Icon(
+                      searchController.text.isNotEmpty
+                          ? Icons.close
+                          : Icons.search,
+                    ),
+                    onPressed: onToggleSearch,
+                  ),
+                  PopupMenuButton<_FilterAction>(
+                    tooltip: filterLabel,
+                    onSelected: onFilterSelected,
+                    itemBuilder: (ctx) {
+                      return <PopupMenuEntry<_FilterAction>>[
+                        const PopupMenuItem<_FilterAction>(
+                          value: _FilterAction.all,
+                          child: Text('Все'),
+                        ),
+                        const PopupMenuItem<_FilterAction>(
+                          value: _FilterAction.open,
+                          child: Text('Открытые'),
+                        ),
+                        const PopupMenuItem<_FilterAction>(
+                          value: _FilterAction.done,
+                          child: Text('Выполненные'),
+                        ),
+                      ];
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: Row(
+                        children: [
+                          Text(
+                            filterLabel,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              color: cs.onSurface,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(Icons.arrow_drop_down, color: cs.onSurface),
+                          const SizedBox(width: 4),
+                        ],
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.share),
+                    tooltip: 'Поделиться',
+                    onPressed: onShare,
+                  ),
+                  PopupMenuButton<int>(
+                    tooltip: 'Меню',
+                    onSelected: (_) => onImport(),
+                    itemBuilder: (ctx) => const [
+                      PopupMenuItem<int>(
+                        value: 1,
+                        child: Text('Импорт из Markdown'),
+                      ),
+                    ],
+                    icon: const Icon(Icons.more_vert),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              QuickAddField(
+                controller: quickAddController,
+                focusNode: quickAddFocus,
+                textFieldKey: quickAddTextFieldKey,
+                hintText: quickAddHint,
+                onSubmitted: onQuickAddSubmitted,
+                autofocus: quickAddAutofocus,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  double get maxExtent => 124;
+
+  @override
+  double get minExtent => 72;
+
+  @override
+  bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) =>
+      true;
 }
