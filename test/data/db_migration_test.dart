@@ -14,7 +14,7 @@ void main() {
 
     // Открываем с новой схемой
     final db2 = AppDatabase(NativeDatabase.memory());
-    expect(db2.schemaVersion, 2);
+    expect(db2.schemaVersion, 3);
     // Проверяем, что колонка note существует
     final columns = await db2
         .customSelect('PRAGMA table_info(items_table)')
