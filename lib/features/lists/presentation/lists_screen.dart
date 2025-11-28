@@ -1,19 +1,18 @@
 // lib/features/lists/presentation/lists_screen.dart
-
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
-
 import 'package:go_router/go_router.dart';
 
 import 'package:listyb/l10n/l10n_stub.dart';
 import 'package:listyb/domain/entities/yb_list.dart';
 import 'package:listyb/domain/entities/yb_counts.dart';
-
 import 'package:listyb/di/stream_providers.dart';
 import 'package:listyb/di/usecase_providers.dart';
 import 'package:listyb/features/common/undo/undo_snackbar_service.dart';
+// 👇 сохраняем порядок в БД
+import 'package:listyb/di/database_providers.dart';
 
 import 'widgets/list_card.dart';
 import 'widgets/list_actions_menu.dart';
@@ -48,9 +47,7 @@ class ListsScreen extends ConsumerWidget {
             ],
           ),
           _BodySliver(listsAsync: listsAsync, countsMapAsync: countsMapAsync),
-          SliverToBoxAdapter(
-            child: SizedBox(height: 56), // 56 (FAB) + 24 (margin) + запас
-          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 56)),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -60,9 +57,7 @@ class ListsScreen extends ConsumerWidget {
         backgroundColor: Theme.of(
           context,
         ).colorScheme.primary.withValues(alpha: 0.65),
-        foregroundColor: Theme.of(
-          context,
-        ).colorScheme.onPrimary, // контрастная иконка
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
         child: const Icon(Icons.add),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
@@ -132,7 +127,6 @@ class _BodySliver extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Ошибки -> Sliver
     if (listsAsync.hasError) {
       return SliverFillRemaining(
         hasScrollBody: false,
@@ -145,7 +139,6 @@ class _BodySliver extends ConsumerWidget {
         child: Center(child: Text('Error: ${countsMapAsync.error}')),
       );
     }
-    // Загрузка -> Sliver
     if (listsAsync.isLoading || countsMapAsync.isLoading) {
       return const _LoadingSliver();
     }
@@ -153,7 +146,6 @@ class _BodySliver extends ConsumerWidget {
     final lists = listsAsync.value ?? const <YbList>[];
     final countsMap = countsMapAsync.value ?? const <int, YbCounts>{};
 
-    // Пусто -> Sliver
     if (lists.isEmpty) {
       return SliverFillRemaining(
         hasScrollBody: false,
@@ -167,47 +159,25 @@ class _BodySliver extends ConsumerWidget {
       );
     }
 
-    // Список -> SliverList
-    return _ListSliver(lists: lists, countsMap: countsMap);
-  }
-}
+    // ✅ Используем SliverReorderableList вместо ReorderableListView
+    return SliverReorderableList(
+      itemCount: lists.length,
+      onReorder: (oldIndex, newIndex) async {
+        final mutable = List<YbList>.from(lists);
+        if (newIndex > oldIndex) newIndex -= 1;
+        final moved = mutable.removeAt(oldIndex);
+        mutable.insert(newIndex, moved);
 
-class _LoadingSliver extends StatelessWidget {
-  const _LoadingSliver();
-
-  @override
-  Widget build(BuildContext context) {
-    return const SliverFillRemaining(
-      hasScrollBody: false,
-      child: Center(child: CircularProgressIndicator()),
-    );
-  }
-}
-
-class _Empty extends StatelessWidget {
-  const _Empty({required this.onCreate});
-  final VoidCallback onCreate;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(child: Text(L10n.t(context, 'list.empty')));
-  }
-}
-
-class _ListSliver extends ConsumerWidget {
-  const _ListSliver({required this.lists, required this.countsMap});
-
-  final List<YbList> lists;
-  final Map<int, YbCounts> countsMap;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
-
-    return SliverList(
-      delegate: SliverChildBuilderDelegate((context, index) {
+        final dao = ref.read(listsDaoProvider);
+        final idToOrder = <int, int>{
+          for (var i = 0; i < mutable.length; i++) mutable[i].id: i,
+        };
+        await dao.updateSortOrdersBulk(idToOrder);
+      },
+      itemBuilder: (context, index) {
         final list = lists[index];
         final counts = countsMap[list.id];
+        final scheme = Theme.of(context).colorScheme;
 
         Widget card = ListCard(
           list: list,
@@ -216,45 +186,49 @@ class _ListSliver extends ConsumerWidget {
           onLongPressAt: (pos) => _onLongPressAt(context, ref, list, pos),
         );
 
-        return Dismissible(
+        return ReorderableDragStartListener(
           key: ValueKey('list_${list.id}'),
-          direction: DismissDirection.horizontal,
-          background: _SwipeBackground(
-            alignment: Alignment.centerLeft,
-            color: scheme.errorContainer,
-            icon: Icons.delete_outline,
-            iconColor: scheme.onErrorContainer,
-          ),
-          secondaryBackground: _SwipeBackground(
-            alignment: Alignment.centerRight,
-            color: scheme.primaryContainer,
-            icon: Icons.edit_outlined,
-            iconColor: scheme.onPrimaryContainer,
-          ),
-          confirmDismiss: (direction) async {
-            if (direction == DismissDirection.startToEnd) {
-              HapticFeedback.lightImpact();
-              final confirmed = await _confirmDeleteWithAutoYes(
-                context,
-                showCountdownOnButton: true,
-              );
-              if (confirmed == true) {
-                if (!context.mounted) return false;
-                final undo = ref.read(undoServiceProvider);
-                await undo.deleteWithUndo(context: context, listId: list.id);
-                return true; // позволим анимацию удаления
+          index: index,
+          child: Dismissible(
+            key: ValueKey('dismiss_${list.id}'),
+            direction: DismissDirection.horizontal,
+            background: _SwipeBackground(
+              alignment: Alignment.centerLeft,
+              color: scheme.errorContainer,
+              icon: Icons.delete_outline,
+              iconColor: scheme.onErrorContainer,
+            ),
+            secondaryBackground: _SwipeBackground(
+              alignment: Alignment.centerRight,
+              color: scheme.primaryContainer,
+              icon: Icons.edit_outlined,
+              iconColor: scheme.onPrimaryContainer,
+            ),
+            confirmDismiss: (direction) async {
+              if (direction == DismissDirection.startToEnd) {
+                HapticFeedback.lightImpact();
+                final confirmed = await _confirmDeleteWithAutoYes(
+                  context,
+                  showCountdownOnButton: true,
+                );
+                if (confirmed == true) {
+                  if (!context.mounted) return false;
+                  final undo = ref.read(undoServiceProvider);
+                  await undo.deleteWithUndo(context: context, listId: list.id);
+                  return true;
+                }
+                return false;
+              } else if (direction == DismissDirection.endToStart) {
+                HapticFeedback.lightImpact();
+                await _rename(context, ref, list);
+                return false;
               }
               return false;
-            } else if (direction == DismissDirection.endToStart) {
-              HapticFeedback.lightImpact();
-              await _rename(context, ref, list);
-              return false; // переименование без удаления карточки
-            }
-            return false;
-          },
-          child: card,
+            },
+            child: card,
+          ),
         );
-      }, childCount: lists.length),
+      },
     );
   }
 
@@ -295,6 +269,7 @@ class _ListSliver extends ConsumerWidget {
       initial: list.title,
     );
     if (title == null || title.trim().isEmpty) return;
+
     final uc = ref.read(renameListUcProvider);
     try {
       await uc(list.id, title);
@@ -325,12 +300,10 @@ class _ListSliver extends ConsumerWidget {
     );
     if (confirm != true) return;
     if (!context.mounted) return;
-
     final undo = ref.read(undoServiceProvider);
     await undo.deleteWithUndo(context: context, listId: list.id);
   }
 
-  /// Диалог подтверждения удаления (с авто «Да» через 5 сек).
   Future<bool?> _confirmDeleteWithAutoYes(
     BuildContext context, {
     bool showCountdownOnButton = false,
@@ -342,6 +315,7 @@ class _ListSliver extends ConsumerWidget {
     Timer? uiTimer;
     int secondsLeft = 5;
     bool decided = false;
+    bool timersStarted = false;
 
     void cleanupTimers() {
       autoTimer?.cancel();
@@ -355,10 +329,6 @@ class _ListSliver extends ConsumerWidget {
       if (!completer.isCompleted) completer.complete(result);
       if (navigator.canPop()) navigator.pop(result);
     }
-
-    autoTimer = Timer(const Duration(seconds: 5), () {
-      decide(true); // авто "Да"
-    });
 
     return showDialog<bool>(
       context: context,
@@ -376,6 +346,13 @@ class _ListSliver extends ConsumerWidget {
                     }
                   })
                 : null;
+
+            if (!timersStarted) {
+              timersStarted = true;
+              autoTimer = Timer(const Duration(seconds: 5), () {
+                decide(true);
+              });
+            }
 
             final deleteLabelBase = L10n.t(ctx, 'common.delete');
             final deleteLabel = showCountdownOnButton
@@ -405,6 +382,28 @@ class _ListSliver extends ConsumerWidget {
       cleanupTimers();
       return completer.future;
     });
+  }
+}
+
+class _LoadingSliver extends StatelessWidget {
+  const _LoadingSliver();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SliverFillRemaining(
+      hasScrollBody: false,
+      child: Center(child: CircularProgressIndicator()),
+    );
+  }
+}
+
+class _Empty extends StatelessWidget {
+  const _Empty({required this.onCreate});
+  final VoidCallback onCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(child: Text(L10n.t(context, 'list.empty')));
   }
 }
 

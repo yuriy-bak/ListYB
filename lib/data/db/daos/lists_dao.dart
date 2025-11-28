@@ -31,6 +31,18 @@ class ListsDao extends DatabaseAccessor<AppDatabase> with _$ListsDaoMixin {
   Future<ListsTableData> getById(int id) =>
       (select(listsTable)..where((t) => t.id.equals(id))).getSingle();
 
+  Future<List<ListsTableData>> getAllOrdered({bool includeArchived = false}) {
+    final q = select(listsTable)
+      ..orderBy([
+        (t) => OrderingTerm.asc(t.sortOrder),
+        (t) => OrderingTerm.asc(t.id),
+      ]);
+    if (!includeArchived) {
+      q.where((t) => t.archived.equals(false));
+    }
+    return q.get();
+  }
+
   /// Обновить заголовок; вернуть число изменённых строк
   Future<int> updateTitle(int id, String title) {
     final now = DateTime.now();
@@ -112,5 +124,26 @@ class ListsDao extends DatabaseAccessor<AppDatabase> with _$ListsDaoMixin {
         done: r.read<int?>('done') ?? 0,
       ),
     );
+  }
+
+  // 👇 ДОБАВЛЕНО: методы для сохранения порядка (sortOrder)
+  Future<void> updateSortOrder(int id, int sortOrder) async {
+    final now = DateTime.now();
+    await (update(listsTable)..where((t) => t.id.equals(id))).write(
+      ListsTableCompanion(sortOrder: Value(sortOrder), updatedAt: Value(now)),
+    );
+  }
+
+  Future<void> updateSortOrdersBulk(Map<int, int> idToOrder) async {
+    final now = DateTime.now();
+    await batch((b) {
+      idToOrder.forEach((id, order) {
+        b.update(
+          listsTable,
+          ListsTableCompanion(sortOrder: Value(order), updatedAt: Value(now)),
+          where: (t) => t.id.equals(id),
+        );
+      });
+    });
   }
 }

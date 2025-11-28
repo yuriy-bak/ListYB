@@ -36,7 +36,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -47,6 +47,13 @@ class AppDatabase extends _$AppDatabase {
       if (from == 1) {
         // Добавляем колонку note в items_table
         await m.addColumn(itemsTable, itemsTable.note);
+      }
+
+      if (from == 2) {
+        // 👇 v3: Инициализация сортировки, если sort_order остался 0
+        await customStatement(
+          'UPDATE lists_table SET sort_order = id WHERE sort_order = 0',
+        );
       }
     },
     beforeOpen: (details) async {
