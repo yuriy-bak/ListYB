@@ -8,7 +8,7 @@ void main() {
     // Запуск старой версии схемы — если используешь step-by-step, drift генерит утилиты и тест‑скелет
     final database = db.AppDatabase(NativeDatabase.memory());
 
-    // TODO: засидить старые данные, если нужно проверить перенос
+    // засидить старые данные, если нужно проверить перенос
     // await database.into(database.items).insert(...);
 
     // Закрытие и повторное открытие с новой версией (или вызов onUpgrade в in‑memory)
