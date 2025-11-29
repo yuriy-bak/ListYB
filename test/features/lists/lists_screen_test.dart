@@ -7,7 +7,7 @@ import 'package:listyb/di/stream_providers.dart';
 import 'package:listyb/features/common/undo/undo_snackbar_service.dart';
 import 'package:listyb/domain/entities/yb_list.dart';
 import 'package:listyb/domain/entities/yb_counts.dart';
-import 'package:listyb/features/lists/presentation/widgets/list_actions_menu.dart';
+import 'package:listyb/features/lists/presentation/widgets/list_card.dart';
 import 'package:listyb/di/database_providers.dart';
 import 'package:listyb/data/db/app_database.dart' as db;
 import 'package:drift/drift.dart' as drift;
@@ -25,7 +25,6 @@ void main() {
         child: const MaterialApp(home: ListsScreen()),
       ),
     );
-
     await tester.pump();
     expect(find.text('Нет списков — создайте первый'), findsOneWidget);
   });
@@ -65,8 +64,8 @@ void main() {
         child: const MaterialApp(home: ListsScreen()),
       ),
     );
-
     await tester.pump();
+
     expect(find.text('Список А'), findsOneWidget);
     expect(find.text('Список B'), findsOneWidget);
     expect(find.text('3'), findsOneWidget);
@@ -110,21 +109,24 @@ void main() {
         child: const MaterialApp(home: ListsScreen()),
       ),
     );
-
     await tester.pump();
 
+    // Находим карточку "Work"
     final tile = find.text('Work');
     expect(tile, findsOneWidget);
 
-    final box = tester.firstRenderObject<RenderBox>(tile);
-    final pos = box.localToGlobal(Offset.zero) + const Offset(10, 10);
+    final cardFinder = find.ancestor(of: tile, matching: find.byType(ListCard));
+    expect(cardFinder, findsOneWidget);
 
-    await tester.longPressAt(pos);
+    // Открываем контекстное меню ТАПОМ по бейджу счётчиков ("1")
+    final countsTextInCard = find
+        .descendant(of: cardFinder, matching: find.text('1'))
+        .first;
+    await tester.tap(countsTextInCard);
     await tester.pumpAndSettle();
 
-    await tester.tap(
-      find.widgetWithText(PopupMenuItem<ListAction>, 'Архивировать'),
-    );
+    // ✅ Ищем пункт по тексту без ограничения типа контейнера
+    await tester.tap(find.text('Архивировать'));
     await tester.pumpAndSettle();
 
     expect(calls, contains('archive:1:true'));
@@ -167,19 +169,26 @@ void main() {
         child: const MaterialApp(home: ListsScreen()),
       ),
     );
-
     await tester.pump();
 
     final tile = find.text('To delete');
-    final box = tester.firstRenderObject<RenderBox>(tile);
-    final pos = box.localToGlobal(Offset.zero) + const Offset(10, 10);
+    expect(tile, findsOneWidget);
 
-    await tester.longPressAt(pos);
+    final cardFinder = find.ancestor(of: tile, matching: find.byType(ListCard));
+    expect(cardFinder, findsOneWidget);
+
+    // Открываем меню ТАПОМ по бейджу ("1")
+    final countsTextInCard = find
+        .descendant(of: cardFinder, matching: find.text('1'))
+        .first;
+    await tester.tap(countsTextInCard);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(PopupMenuItem<ListAction>, 'Удалить'));
+    // ✅ Ищем пункт по тексту
+    await tester.tap(find.text('Удалить'));
     await tester.pumpAndSettle();
 
+    // Ищем кнопку "Удалить" в диалоге (с авто-таймером)
     final deleteText = find.byWidgetPredicate(
       (w) => w is Text && (w.data?.startsWith('Удалить') ?? false),
     );
@@ -187,7 +196,6 @@ void main() {
       of: deleteText,
       matching: find.byType(TextButton),
     );
-
     await tester.tap(deleteButton);
     await tester.pumpAndSettle();
 
@@ -260,7 +268,6 @@ void main() {
 
     // ✅ Проверка начального состояния через прямой запрос
     final before = await listsDao.getAllOrdered();
-
     expect(before.map((e) => e.title).toList(), ['A', 'B']);
 
     // Вызываем onReorder у SliverReorderableList напрямую
@@ -268,6 +275,7 @@ void main() {
     expect(sliverFinder, findsOneWidget);
     final sliver = tester.widget<SliverReorderableList>(sliverFinder);
     sliver.onReorder(0, 2); // перенос 0-го элемента в конец (станет 1)
+
     await tester.pumpAndSettle();
 
     // Проверяем итоговый порядок через прямой запрос

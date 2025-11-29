@@ -342,7 +342,7 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
     }
 
     // Высота блока "Поиск + Быстрый ввод"
-    const double _kHeaderHeight = 120;
+    const double kHeaderHeight = 120;
 
     return PopScope(
       canPop: false,
@@ -431,7 +431,7 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
               toolbarHeight: 0, // содержимое будет в bottom
               backgroundColor: theme.colorScheme.surface,
               bottom: PreferredSize(
-                preferredSize: const Size.fromHeight(_kHeaderHeight),
+                preferredSize: const Size.fromHeight(kHeaderHeight),
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: _FixedHeader(
