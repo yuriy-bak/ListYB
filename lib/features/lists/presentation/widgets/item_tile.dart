@@ -25,6 +25,10 @@ class ItemTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
     final tile = ListTile(
       leading: Checkbox(
         key: Key('item_checkbox_${item.id}'),
@@ -39,19 +43,20 @@ class ItemTile extends StatelessWidget {
       ),
       // Контекстное меню больше не нужно — работаем свайпами на уровне списка
       onLongPress: null,
-      trailing: dndEnabled
-          ? ReorderableDragStartListener(
-              key: Key('drag_${item.id}'),
-              index: itemIndex, // значение индекса игнорируется с builder’ом
-              child: const Icon(Icons.drag_handle),
-            )
-          : null,
+      trailing: null,
     );
 
     // Оборачиваем в Focus, чтобы элемент мог получать фокус (без клавиатуры)
     return Focus(
       focusNode: focusNode,
-      child: Material(child: tile),
+      child: Card(
+        // margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        surfaceTintColor: isDark ? cs.primary.withValues(alpha: 0.10) : null,
+        color: isDark
+            ? cs.surfaceContainerHighest.withValues(alpha: 0.18)
+            : null,
+        child: tile,
+      ),
     );
   }
 }

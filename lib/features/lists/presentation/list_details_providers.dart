@@ -4,6 +4,17 @@ import 'package:listyb/domain/entities/yb_list.dart';
 import 'package:listyb/features/lists/application/items_filter.dart';
 import 'package:listyb/di/usecase_providers.dart';
 
+import 'package:listyb/domain/entities/yb_counts.dart';
+import 'package:listyb/di/database_providers.dart';
+
+/// Провайдер для наблюдения количества задач (открытые и всего) по ID списка
+final watchCountsProvider = StreamProvider.family<YbCounts, int>((ref, listId) {
+  final dao = ref.read(listsDaoProvider);
+  return dao.watchCounts(listId).map((tuple) {
+    return YbCounts(total: tuple.total, active: tuple.active, done: tuple.done);
+  });
+});
+
 /// Фильтр по состоянию (пер-лист).
 final itemsFilterProvider = StateProvider.family<ItemsFilter, int>(
   (ref, listId) => const ItemsFilter.all(),
