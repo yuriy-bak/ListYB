@@ -396,28 +396,16 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
               ),
               actions: [],
               // Ключевые флаги для автоскрытия
-              floating: true,
-              snap: true,
+              floating: false,
+              snap: false,
               pinned: true,
               elevation: 0,
             ),
-            SliverPersistentHeader(
-              // pinned: true,
-              floating: true,
-              delegate: _SearchHeaderDelegate(
+
+            SliverToBoxAdapter(
+              child: _FixedHeader(
                 searchController: _searchController,
                 searchFocus: _searchFocus,
-                searchMode: _searchMode,
-                onToggleSearch: () {
-                  if (_searchController.text.isNotEmpty) {
-                    _searchController.clear();
-                    ref.read(itemsQueryProvider(widget.listId).notifier).state =
-                        '';
-                  } else {
-                    _searchFocus.requestFocus();
-                  }
-                  setState(() {});
-                },
                 onSearchChanged: (text) =>
                     ref.read(itemsQueryProvider(widget.listId).notifier).state =
                         text,
@@ -455,7 +443,6 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
                 onQuickAddSubmitted: _onQuickAddSubmitted,
                 quickAddHint: s.itemsAddPlaceholder,
                 quickAddAutofocus: widget.quickAdd,
-                quickAddTextFieldKey: const Key('quick_add_field'),
               ),
             ),
           ],
@@ -623,12 +610,10 @@ class _SwipeBackground extends StatelessWidget {
   }
 }
 
-class _SearchHeaderDelegate extends SliverPersistentHeaderDelegate {
-  _SearchHeaderDelegate({
+class _FixedHeader extends StatelessWidget {
+  const _FixedHeader({
     required this.searchController,
     required this.searchFocus,
-    required this.searchMode,
-    required this.onToggleSearch,
     required this.onSearchChanged,
     required this.searchHint,
     required this.filterLabel,
@@ -640,13 +625,10 @@ class _SearchHeaderDelegate extends SliverPersistentHeaderDelegate {
     required this.onQuickAddSubmitted,
     required this.quickAddHint,
     required this.quickAddAutofocus,
-    required this.quickAddTextFieldKey,
   });
 
   final TextEditingController searchController;
   final FocusNode searchFocus;
-  final bool searchMode;
-  final VoidCallback onToggleSearch;
   final ValueChanged<String> onSearchChanged;
   final String searchHint;
   final String filterLabel;
@@ -658,23 +640,17 @@ class _SearchHeaderDelegate extends SliverPersistentHeaderDelegate {
   final ValueChanged<String> onQuickAddSubmitted;
   final String quickAddHint;
   final bool quickAddAutofocus;
-  final Key quickAddTextFieldKey;
 
   @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) {
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     return Material(
       color: cs.surface,
-      elevation: overlapsContent ? 2 : 0,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize: MainAxisSize.max,
           children: [
             Row(
               children: [
@@ -683,7 +659,9 @@ class _SearchHeaderDelegate extends SliverPersistentHeaderDelegate {
                     key: const Key('search_field'),
                     controller: searchController,
                     focusNode: searchFocus,
-                    autofocus: false,
+                    minLines: 1,
+                    maxLines: 1,
+                    textAlignVertical: TextAlignVertical.center,
                     textInputAction: TextInputAction.search,
                     style: theme.textTheme.titleMedium?.copyWith(
                       color: cs.onSurface,
@@ -695,6 +673,8 @@ class _SearchHeaderDelegate extends SliverPersistentHeaderDelegate {
                         color: cs.onSurface,
                       ),
                       border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
                     ),
                     onChanged: onSearchChanged,
                   ),
@@ -707,27 +687,32 @@ class _SearchHeaderDelegate extends SliverPersistentHeaderDelegate {
                         ? Icons.close
                         : Icons.search,
                   ),
-                  onPressed: onToggleSearch,
+                  onPressed: () {
+                    if (searchController.text.isNotEmpty) {
+                      searchController.clear();
+                      onSearchChanged('');
+                    } else {
+                      searchFocus.requestFocus();
+                    }
+                  },
                 ),
                 PopupMenuButton<_FilterAction>(
                   tooltip: filterLabel,
                   onSelected: onFilterSelected,
-                  itemBuilder: (ctx) {
-                    return <PopupMenuEntry<_FilterAction>>[
-                      const PopupMenuItem<_FilterAction>(
-                        value: _FilterAction.all,
-                        child: Text('Все'),
-                      ),
-                      const PopupMenuItem<_FilterAction>(
-                        value: _FilterAction.open,
-                        child: Text('Открытые'),
-                      ),
-                      const PopupMenuItem<_FilterAction>(
-                        value: _FilterAction.done,
-                        child: Text('Выполненные'),
-                      ),
-                    ];
-                  },
+                  itemBuilder: (ctx) => const [
+                    PopupMenuItem<_FilterAction>(
+                      value: _FilterAction.all,
+                      child: Text('Все'),
+                    ),
+                    PopupMenuItem<_FilterAction>(
+                      value: _FilterAction.open,
+                      child: Text('Открытые'),
+                    ),
+                    PopupMenuItem<_FilterAction>(
+                      value: _FilterAction.done,
+                      child: Text('Выполненные'),
+                    ),
+                  ],
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 6),
                     child: Row(
@@ -754,20 +739,17 @@ class _SearchHeaderDelegate extends SliverPersistentHeaderDelegate {
                   tooltip: 'Меню',
                   onSelected: (_) => onImport(),
                   itemBuilder: (ctx) => const [
-                    PopupMenuItem<int>(
-                      value: 1,
-                      child: Text('Импорт из Markdown'),
-                    ),
+                    PopupMenuItem<int>(value: 1, child: Text('Импорт')),
                   ],
                   icon: const Icon(Icons.more_vert),
                 ),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 8),
             QuickAddField(
               controller: quickAddController,
               focusNode: quickAddFocus,
-              textFieldKey: quickAddTextFieldKey,
+              textFieldKey: const Key('quick_add_field'),
               hintText: quickAddHint,
               onSubmitted: onQuickAddSubmitted,
               autofocus: quickAddAutofocus,
@@ -777,14 +759,4 @@ class _SearchHeaderDelegate extends SliverPersistentHeaderDelegate {
       ),
     );
   }
-
-  @override
-  double get maxExtent => 124;
-
-  @override
-  double get minExtent => 72;
-
-  @override
-  bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) =>
-      true;
 }
