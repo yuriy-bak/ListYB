@@ -35,7 +35,9 @@ class ListCard extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         // Подсветка в темной теме
         surfaceTintColor: isDark ? cs.primary.withValues(alpha: 0.10) : null,
-        color: isDark ? cs.onSurfaceVariant.withValues(alpha: 0.12) : null,
+        color: isDark
+            ? cs.surfaceContainerHighest.withValues(alpha: 0.18)
+            : null,
 
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -80,7 +82,6 @@ class _Badge extends StatelessWidget {
     final text = '$open';
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
