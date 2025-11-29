@@ -672,7 +672,7 @@ class _FixedHeader extends StatelessWidget {
                       hintStyle: theme.textTheme.titleMedium?.copyWith(
                         color: cs.onSurface,
                       ),
-                      border: InputBorder.none,
+                      border: UnderlineInputBorder(),
                       isDense: true,
                       contentPadding: const EdgeInsets.symmetric(vertical: 10),
                     ),
