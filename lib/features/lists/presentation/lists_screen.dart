@@ -162,6 +162,32 @@ class _BodySliver extends ConsumerWidget {
     // ✅ Используем SliverReorderableList вместо ReorderableListView
     return SliverReorderableList(
       itemCount: lists.length,
+      proxyDecorator: (Widget child, int index, Animation<double> anim) {
+        final curved = CurvedAnimation(parent: anim, curve: Curves.easeOut);
+        return ScaleTransition(
+          scale: Tween<double>(begin: 1.0, end: 1.03).animate(curved),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x33000000),
+                  blurRadius: 12,
+                  spreadRadius: 2,
+                  offset: Offset(0, 6),
+                ),
+              ],
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Theme.of(
+                  context,
+                ).colorScheme.primary.withValues(alpha: 0.6),
+                width: 2,
+              ),
+            ),
+            child: Material(color: Colors.transparent, child: child),
+          ),
+        );
+      },
       onReorder: (oldIndex, newIndex) async {
         final mutable = List<YbList>.from(lists);
         if (newIndex > oldIndex) newIndex -= 1;
@@ -183,10 +209,10 @@ class _BodySliver extends ConsumerWidget {
           list: list,
           counts: counts,
           onTap: () => GoRouter.of(context).go('/list/${list.id}'),
-          onLongPressAt: (pos) => _onLongPressAt(context, ref, list, pos),
+          onCountsTapAt: (pos) => _onCountsTapAt(context, ref, list, pos),
         );
 
-        return ReorderableDragStartListener(
+        return ReorderableDelayedDragStartListener(
           key: ValueKey('list_${list.id}'),
           index: index,
           child: Dismissible(
@@ -232,7 +258,7 @@ class _BodySliver extends ConsumerWidget {
     );
   }
 
-  Future<void> _onLongPressAt(
+  Future<void> _onCountsTapAt(
     BuildContext context,
     WidgetRef ref,
     YbList list,

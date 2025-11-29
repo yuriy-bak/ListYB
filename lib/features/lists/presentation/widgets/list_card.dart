@@ -12,27 +12,31 @@ class ListCard extends StatelessWidget {
     required this.list,
     required this.counts,
     required this.onTap,
-    required this.onLongPressAt, // передаём глобальные координаты для showMenu
+    required this.onCountsTapAt, // меню только по нажатию на счётчик
   });
 
   final YbList list;
   final YbCounts? counts;
   final VoidCallback onTap;
-  final void Function(Offset globalPosition) onLongPressAt;
+  final void Function(Offset globalPosition) onCountsTapAt;
 
   @override
   Widget build(BuildContext context) {
     final open = counts?.active ?? 0;
     final total = counts?.total ?? 0;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      onLongPressStart: (details) {
-        onLongPressAt(details.globalPosition);
-      },
       child: Card(
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        // Подсветка в темной теме
+        surfaceTintColor: isDark ? cs.primary.withValues(alpha: 0.10) : null,
+        color: isDark ? cs.onSurfaceVariant.withValues(alpha: 0.12) : null,
+
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
@@ -49,8 +53,14 @@ class ListCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              // Бейдж open/total справа, не влияет на перенос заголовка
-              _Badge(open: open, total: total),
+              // Бейдж open/total справа: по нажатию на него  - контекстное меню
+              GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTapDown: (details) {
+                  onCountsTapAt(details.globalPosition);
+                },
+                child: _Badge(open: open, total: total),
+              ),
             ],
           ),
         ),
@@ -68,6 +78,10 @@ class _Badge extends StatelessWidget {
   Widget build(BuildContext context) {
     // final text = '$open/$total';
     final text = '$open';
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
@@ -76,8 +90,8 @@ class _Badge extends StatelessWidget {
       ),
       child: Text(
         text,
-        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-          color: Theme.of(context).colorScheme.onSecondaryContainer,
+        style: theme.textTheme.labelMedium?.copyWith(
+          color: cs.onSecondaryContainer,
           fontFeatures: const [FontFeature.tabularFigures()],
         ),
       ),
