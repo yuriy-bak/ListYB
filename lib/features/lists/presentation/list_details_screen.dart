@@ -461,7 +461,7 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
           ],
 
           body: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(0),
             child: Column(
               children: [
                 Expanded(
@@ -508,16 +508,13 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
                               _onDeleteWithUndo(it);
                             }
                           },
-                          child: Material(
-                            key: ValueKey('item_${it.id}'),
-                            child: ItemTile(
-                              item: it,
-                              itemIndex: index,
-                              dndEnabled: dndEnabled,
-                              onToggle: () => _onToggleItem(it.id),
-                              onDelete: () => _onDeleteWithUndo(it),
-                              focusNode: _focusFor(it.id),
-                            ),
+                          child: ItemTile(
+                            item: it,
+                            itemIndex: index,
+                            dndEnabled: dndEnabled,
+                            onToggle: () => _onToggleItem(it.id),
+                            onDelete: () => _onDeleteWithUndo(it),
+                            focusNode: _focusFor(it.id),
                           ),
                         );
                       }
@@ -526,9 +523,51 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
                         return ReorderableListView.builder(
                           itemCount: items.length,
                           onReorder: onReorder,
+                          // 🔦 Подсветка перетаскиваемого элемента
+                          proxyDecorator:
+                              (
+                                Widget child,
+                                int index,
+                                Animation<double> anim,
+                              ) {
+                                final curved = CurvedAnimation(
+                                  parent: anim,
+                                  curve: Curves.easeOut,
+                                );
+                                return ScaleTransition(
+                                  scale: Tween(
+                                    begin: 1.0,
+                                    end: 1.03,
+                                  ).animate(curved),
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      boxShadow: const [
+                                        BoxShadow(
+                                          color: Color(0x13000000),
+                                          blurRadius: 12,
+                                          spreadRadius: 2,
+                                          offset: Offset(0, 6),
+                                        ),
+                                      ],
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primary
+                                            .withValues(alpha: 0.6),
+                                        width: 2,
+                                      ),
+                                    ),
+                                    child: Material(
+                                      color: Colors.transparent,
+                                      child: child,
+                                    ),
+                                  ),
+                                );
+                              },
                           itemBuilder: (context, index) {
                             final it = items[index];
-                            return ReorderableDragStartListener(
+                            return ReorderableDelayedDragStartListener(
                               key: ValueKey('item_${it.id}'),
                               index: index,
                               child: buildRow(
@@ -632,111 +671,108 @@ class _SearchHeaderDelegate extends SliverPersistentHeaderDelegate {
     return Material(
       color: cs.surface,
       elevation: overlapsContent ? 2 : 0,
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      key: const Key('search_field'),
-                      controller: searchController,
-                      focusNode: searchFocus,
-                      autofocus: true,
-                      textInputAction: TextInputAction.search,
-                      style: theme.textTheme.titleMedium?.copyWith(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    key: const Key('search_field'),
+                    controller: searchController,
+                    focusNode: searchFocus,
+                    autofocus: false,
+                    textInputAction: TextInputAction.search,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: cs.onSurface,
+                    ),
+                    cursorColor: cs.onSurface,
+                    decoration: InputDecoration(
+                      hintText: searchHint,
+                      hintStyle: theme.textTheme.titleMedium?.copyWith(
                         color: cs.onSurface,
                       ),
-                      cursorColor: cs.onSurface,
-                      decoration: InputDecoration(
-                        hintText: searchHint,
-                        hintStyle: theme.textTheme.titleMedium?.copyWith(
-                          color: cs.onSurface,
-                        ),
-                        border: InputBorder.none,
+                      border: InputBorder.none,
+                    ),
+                    onChanged: onSearchChanged,
+                  ),
+                ),
+                IconButton(
+                  key: const Key('search_button'),
+                  tooltip: searchHint,
+                  icon: Icon(
+                    searchController.text.isNotEmpty
+                        ? Icons.close
+                        : Icons.search,
+                  ),
+                  onPressed: onToggleSearch,
+                ),
+                PopupMenuButton<_FilterAction>(
+                  tooltip: filterLabel,
+                  onSelected: onFilterSelected,
+                  itemBuilder: (ctx) {
+                    return <PopupMenuEntry<_FilterAction>>[
+                      const PopupMenuItem<_FilterAction>(
+                        value: _FilterAction.all,
+                        child: Text('Все'),
                       ),
-                      onChanged: onSearchChanged,
-                    ),
-                  ),
-                  IconButton(
-                    key: const Key('search_button'),
-                    tooltip: searchHint,
-                    icon: Icon(
-                      searchController.text.isNotEmpty
-                          ? Icons.close
-                          : Icons.search,
-                    ),
-                    onPressed: onToggleSearch,
-                  ),
-                  PopupMenuButton<_FilterAction>(
-                    tooltip: filterLabel,
-                    onSelected: onFilterSelected,
-                    itemBuilder: (ctx) {
-                      return <PopupMenuEntry<_FilterAction>>[
-                        const PopupMenuItem<_FilterAction>(
-                          value: _FilterAction.all,
-                          child: Text('Все'),
-                        ),
-                        const PopupMenuItem<_FilterAction>(
-                          value: _FilterAction.open,
-                          child: Text('Открытые'),
-                        ),
-                        const PopupMenuItem<_FilterAction>(
-                          value: _FilterAction.done,
-                          child: Text('Выполненные'),
-                        ),
-                      ];
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                      child: Row(
-                        children: [
-                          Text(
-                            filterLabel,
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              color: cs.onSurface,
-                            ),
+                      const PopupMenuItem<_FilterAction>(
+                        value: _FilterAction.open,
+                        child: Text('Открытые'),
+                      ),
+                      const PopupMenuItem<_FilterAction>(
+                        value: _FilterAction.done,
+                        child: Text('Выполненные'),
+                      ),
+                    ];
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: Row(
+                      children: [
+                        Text(
+                          filterLabel,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: cs.onSurface,
                           ),
-                          const SizedBox(width: 4),
-                          Icon(Icons.arrow_drop_down, color: cs.onSurface),
-                          const SizedBox(width: 4),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(Icons.arrow_drop_down, color: cs.onSurface),
+                        const SizedBox(width: 4),
+                      ],
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.share),
-                    tooltip: 'Поделиться',
-                    onPressed: onShare,
-                  ),
-                  PopupMenuButton<int>(
-                    tooltip: 'Меню',
-                    onSelected: (_) => onImport(),
-                    itemBuilder: (ctx) => const [
-                      PopupMenuItem<int>(
-                        value: 1,
-                        child: Text('Импорт из Markdown'),
-                      ),
-                    ],
-                    icon: const Icon(Icons.more_vert),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              QuickAddField(
-                controller: quickAddController,
-                focusNode: quickAddFocus,
-                textFieldKey: quickAddTextFieldKey,
-                hintText: quickAddHint,
-                onSubmitted: onQuickAddSubmitted,
-                autofocus: quickAddAutofocus,
-              ),
-            ],
-          ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.share),
+                  tooltip: 'Поделиться',
+                  onPressed: onShare,
+                ),
+                PopupMenuButton<int>(
+                  tooltip: 'Меню',
+                  onSelected: (_) => onImport(),
+                  itemBuilder: (ctx) => const [
+                    PopupMenuItem<int>(
+                      value: 1,
+                      child: Text('Импорт из Markdown'),
+                    ),
+                  ],
+                  icon: const Icon(Icons.more_vert),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            QuickAddField(
+              controller: quickAddController,
+              focusNode: quickAddFocus,
+              textFieldKey: quickAddTextFieldKey,
+              hintText: quickAddHint,
+              onSubmitted: onQuickAddSubmitted,
+              autofocus: quickAddAutofocus,
+            ),
+          ],
         ),
       ),
     );
