@@ -1,3 +1,4 @@
+// lib/features/lists/presentation/list_details_screen.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -34,15 +35,23 @@ class ListDetailsScreen extends ConsumerStatefulWidget {
 class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
   final _quickAddController = TextEditingController();
   final _searchController = TextEditingController();
-
   final _quickAddFocus = FocusNode();
   final _searchFocus = FocusNode();
 
   bool _searchMode = false;
-
   List<YbItem> _lastAllItems = const [];
   final Map<int, FocusNode> _itemFocus = {};
   bool _importInProgress = false;
+
+  // Сброс поиска и фильтров (и локального UI-поля)
+  void _resetSearchAndFilters() {
+    // Сброс текста поиска в провайдере и контроллере
+    ref.read(itemsQueryProvider(widget.listId).notifier).state = '';
+    _searchController.clear();
+    // Сброс фильтра на "Все"
+    ref.read(itemsFilterProvider(widget.listId).notifier).state =
+        const ItemsFilter.all();
+  }
 
   FocusNode _focusFor(int id) => _itemFocus.putIfAbsent(id, () => FocusNode());
 
@@ -52,6 +61,12 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
     if (widget.quickAdd) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _focusQuickAdd());
     }
+
+    // Сбрасываем поиск/фильтры при каждом входе на экран (после первой отрисовки)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _resetSearchAndFilters();
+    });
   }
 
   @override
@@ -63,6 +78,15 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
     _searchFocus.dispose();
     _quickAddController.dispose();
     _searchController.dispose();
+
+    // На всякий случай сброс при dispose (если прошли не через onPopInvoked)
+    // Важно: проверяем mounted, чтобы не трогать контекст, но ref доступен.
+    try {
+      _resetSearchAndFilters();
+    } catch (_) {
+      /* ignore */
+    }
+
     super.dispose();
   }
 
@@ -101,7 +125,6 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
     final deleteUc = ref.read(deleteItemUcProvider);
     final addUc = ref.read(addItemUcProvider);
     final reorderUc = ref.read(reorderItemsUcProvider);
-
     final before = List<YbItem>.from(_lastAllItems);
     final oldIndex = before.indexWhere((e) => e.id == item.id);
     final baseIdsWithout = before
@@ -129,7 +152,6 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
                 : oldIndex.clamp(0, ids.length);
             ids.insert(insertIndex, newId);
             await reorderUc(widget.listId, ids);
-
             if (!mounted) return;
             FocusScope.of(context).unfocus();
             WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -144,8 +166,8 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
   Future<void> _onEditTitle(YbItem item) async {
     final s = Strings.of(context);
     final updateUc = ref.read(updateItemUcProvider);
-
     final controller = TextEditingController(text: item.title);
+
     final newTitle = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -202,7 +224,6 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
 
     final markdown = await showDialog<String>(
       context: context,
-
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setState) => AlertDialog(
           title: const Text('Импорт из Markdown'),
@@ -220,7 +241,6 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
                   border: OutlineInputBorder(),
                 ),
               ),
-              // const SizedBox(height: 12),
               CheckboxListTile(
                 value: replaceTitle,
                 onChanged: (v) => setState(() => replaceTitle = v ?? true),
@@ -239,7 +259,6 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
               ),
             ],
           ),
-
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
@@ -255,8 +274,8 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
     );
 
     if (markdown == null || markdown.trim().isEmpty) return;
-    final parsed = parseShareMarkdown(markdown);
 
+    final parsed = parseShareMarkdown(markdown);
     if (parsed.hasMultipleLists) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -310,8 +329,8 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
     final reorderUc = ref.read(reorderItemsUcProvider);
     final listAsync = ref.watch(watchListStreamProvider(widget.listId));
     final countsAsync = ref.watch(watchCountsProvider(widget.listId));
-
     final s = Strings.of(context);
+
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
@@ -322,16 +341,17 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
       return s.itemsFilterAll;
     }
 
+    // Высота блока "Поиск + Быстрый ввод"
+    const double _kHeaderHeight = 120;
+
     return PopScope(
-      // Всегда перехватываем системную «Назад», чтобы не закрывать приложение.
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        // 1) Если открыт поиск — закрыть и очистить
+        _resetSearchAndFilters();
         if (_searchMode) {
           _toggleSearchMode(ref, clearOnExit: true);
           return;
         }
-        // 2) Если есть куда вернуться — обычный pop; иначе — на главный
         final nav = Navigator.of(context);
         if (nav.canPop()) {
           nav.maybePop();
@@ -339,12 +359,11 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
           context.go('/');
         }
       },
-
       child: Scaffold(
-        body: NestedScrollView(
-          headerSliverBuilder: (ctx, innerBoxIsScrolled) => [
+        body: CustomScrollView(
+          slivers: [
+            // 1) Заголовок списка — закреплён всегда
             SliverAppBar(
-              // Принудительно показываем стрелку «Назад»
               automaticallyImplyLeading: false,
               toolbarHeight: 44,
               leading: BackButton(
@@ -386,7 +405,7 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
                             ),
                           ),
                         ],
-                        style: TextStyle(fontSize: 16),
+                        style: const TextStyle(fontSize: 16),
                       ),
                     ),
                     loading: () => const SizedBox.shrink(),
@@ -394,190 +413,206 @@ class _ListDetailsScreenState extends ConsumerState<ListDetailsScreen> {
                   ),
                 ],
               ),
-              actions: [],
-              // Ключевые флаги для автоскрытия
+              actions: const [],
               floating: false,
               snap: false,
               pinned: true,
               elevation: 0,
             ),
 
-            SliverToBoxAdapter(
-              child: _FixedHeader(
-                searchController: _searchController,
-                searchFocus: _searchFocus,
-                onSearchChanged: (text) =>
-                    ref.read(itemsQueryProvider(widget.listId).notifier).state =
-                        text,
-                searchHint: s.commonSearch,
-                filterLabel: filterLabel(currentFilter),
-                onFilterSelected: (a) {
-                  final notifier = ref.read(
-                    itemsFilterProvider(widget.listId).notifier,
+            // 2) Плавающая панель "Поиск + Быстрый ввод" — появляется при лёгком скролле вверх
+            SliverAppBar(
+              automaticallyImplyLeading: false,
+              primary: false, // важное: располагается под pinned AppBar
+              pinned: false,
+              floating: true,
+              snap: true,
+              elevation: 2,
+              toolbarHeight: 0, // содержимое будет в bottom
+              backgroundColor: theme.colorScheme.surface,
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(_kHeaderHeight),
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _FixedHeader(
+                    searchController: _searchController,
+                    searchFocus: _searchFocus,
+                    onSearchChanged: (text) =>
+                        ref
+                                .read(
+                                  itemsQueryProvider(widget.listId).notifier,
+                                )
+                                .state =
+                            text,
+                    searchHint: s.commonSearch,
+                    filterLabel: filterLabel(currentFilter),
+                    onFilterSelected: (a) {
+                      final notifier = ref.read(
+                        itemsFilterProvider(widget.listId).notifier,
+                      );
+                      switch (a) {
+                        case _FilterAction.all:
+                          notifier.state = const ItemsFilter.all();
+                          break;
+                        case _FilterAction.open:
+                          notifier.state = const ItemsFilter.active();
+                          break;
+                        case _FilterAction.done:
+                          notifier.state = const ItemsFilter.done();
+                          break;
+                      }
+                    },
+                    onShare: () async {
+                      final list = listAsync.value;
+                      final items = _lastAllItems;
+                      if (list == null || items.isEmpty) return;
+                      final shareText = generateShareMarkdownText(
+                        list.title,
+                        items,
+                      );
+                      await SharePlus.instance.share(
+                        ShareParams(text: shareText),
+                      );
+                    },
+                    onImport: _showImportDialog,
+                    quickAddController: _quickAddController,
+                    quickAddFocus: _quickAddFocus,
+                    onQuickAddSubmitted: _onQuickAddSubmitted,
+                    quickAddHint: s.itemsAddPlaceholder,
+                    quickAddAutofocus: widget.quickAdd,
+                  ),
+                ),
+              ),
+            ),
+
+            // 3) Список элементов
+            itemsAsync.when(
+              data: (items) {
+                Future<void> onReorder(int oldIndex, int newIndex) async {
+                  final ids = items.map((e) => e.id).toList();
+                  if (newIndex > oldIndex) newIndex -= 1;
+                  final moved = ids.removeAt(oldIndex);
+                  ids.insert(newIndex, moved);
+                  await reorderUc(widget.listId, ids);
+                }
+
+                Widget buildRow(int index) {
+                  final it = items[index];
+                  return Dismissible(
+                    key: ValueKey('dismiss_${it.id}'),
+                    direction: DismissDirection.horizontal,
+                    background: _SwipeBackground(
+                      alignment: Alignment.centerLeft,
+                      color: Colors.red.shade50,
+                      icon: Icons.delete,
+                      iconColor: Colors.red,
+                    ),
+                    secondaryBackground: _SwipeBackground(
+                      alignment: Alignment.centerRight,
+                      color: Colors.blue.shade50,
+                      icon: Icons.edit,
+                      iconColor: Colors.blue,
+                    ),
+                    confirmDismiss: (direction) async {
+                      if (direction == DismissDirection.endToStart) {
+                        await _onEditTitle(it);
+                        return false;
+                      } else {
+                        return true; // delete
+                      }
+                    },
+                    onDismissed: (direction) {
+                      if (direction == DismissDirection.startToEnd) {
+                        _onDeleteWithUndo(it);
+                      }
+                    },
+                    child: ItemTile(
+                      item: it,
+                      itemIndex: index,
+                      dndEnabled: dndEnabled,
+                      onToggle: () => _onToggleItem(it.id),
+                      onDelete: () => _onDeleteWithUndo(it),
+                      focusNode: _focusFor(it.id),
+                    ),
                   );
-                  switch (a) {
-                    case _FilterAction.all:
-                      notifier.state = const ItemsFilter.all();
-                      break;
-                    case _FilterAction.open:
-                      notifier.state = const ItemsFilter.active();
-                      break;
-                    case _FilterAction.done:
-                      notifier.state = const ItemsFilter.done();
-                      break;
-                  }
-                },
-                onShare: () async {
-                  final list = listAsync.value;
-                  final items = _lastAllItems;
-                  if (list == null || items.isEmpty) return;
-                  final shareText = generateShareMarkdownText(
-                    list.title,
-                    items,
+                }
+
+                if (items.isEmpty) {
+                  return const SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: EmptyState(),
                   );
-                  await SharePlus.instance.share(ShareParams(text: shareText));
-                },
-                onImport: _showImportDialog,
-                quickAddController: _quickAddController,
-                quickAddFocus: _quickAddFocus,
-                onQuickAddSubmitted: _onQuickAddSubmitted,
-                quickAddHint: s.itemsAddPlaceholder,
-                quickAddAutofocus: widget.quickAdd,
+                }
+
+                if (dndEnabled) {
+                  return SliverReorderableList(
+                    itemCount: items.length,
+                    onReorder: onReorder,
+                    // 🔦 подсветка перетаскиваемого элемента
+                    proxyDecorator:
+                        (Widget child, int index, Animation<double> anim) {
+                          final curved = CurvedAnimation(
+                            parent: anim,
+                            curve: Curves.easeOut,
+                          );
+                          return ScaleTransition(
+                            scale: Tween<double>(
+                              begin: 1.0,
+                              end: 1.03,
+                            ).animate(curved),
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Color(0x13000000),
+                                    blurRadius: 12,
+                                    spreadRadius: 2,
+                                    offset: Offset(0, 6),
+                                  ),
+                                ],
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.primary.withValues(alpha: 0.6),
+                                  width: 2,
+                                ),
+                              ),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: child,
+                              ),
+                            ),
+                          );
+                        },
+                    itemBuilder: (context, index) {
+                      final it = items[index];
+                      return ReorderableDelayedDragStartListener(
+                        key: ValueKey('item_${it.id}'),
+                        index: index,
+                        child: buildRow(index),
+                      );
+                    },
+                  );
+                } else {
+                  return SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) => buildRow(index),
+                      childCount: items.length,
+                    ),
+                  );
+                }
+              },
+              loading: () => const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (e, _) => SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(child: Text(e.toString())),
               ),
             ),
           ],
-
-          body: Padding(
-            padding: const EdgeInsets.all(0),
-            child: Column(
-              children: [
-                Expanded(
-                  child: itemsAsync.when(
-                    data: (items) {
-                      if (items.isEmpty) return const EmptyState();
-
-                      Future<void> onReorder(int oldIndex, int newIndex) async {
-                        final ids = items.map((e) => e.id).toList();
-                        if (newIndex > oldIndex) newIndex -= 1;
-                        final moved = ids.removeAt(oldIndex);
-                        ids.insert(newIndex, moved);
-                        await reorderUc(widget.listId, ids);
-                      }
-
-                      Widget buildRow(int index) {
-                        final it = items[index];
-
-                        return Dismissible(
-                          key: ValueKey('dismiss_${it.id}'),
-                          direction: DismissDirection.horizontal,
-                          background: _SwipeBackground(
-                            alignment: Alignment.centerLeft,
-                            color: Colors.red.shade50,
-                            icon: Icons.delete,
-                            iconColor: Colors.red,
-                          ),
-                          secondaryBackground: _SwipeBackground(
-                            alignment: Alignment.centerRight,
-                            color: Colors.blue.shade50,
-                            icon: Icons.edit,
-                            iconColor: Colors.blue,
-                          ),
-                          confirmDismiss: (direction) async {
-                            if (direction == DismissDirection.endToStart) {
-                              await _onEditTitle(it);
-                              return false;
-                            } else {
-                              return true; // delete
-                            }
-                          },
-                          onDismissed: (direction) {
-                            if (direction == DismissDirection.startToEnd) {
-                              _onDeleteWithUndo(it);
-                            }
-                          },
-                          child: ItemTile(
-                            item: it,
-                            itemIndex: index,
-                            dndEnabled: dndEnabled,
-                            onToggle: () => _onToggleItem(it.id),
-                            onDelete: () => _onDeleteWithUndo(it),
-                            focusNode: _focusFor(it.id),
-                          ),
-                        );
-                      }
-
-                      if (dndEnabled) {
-                        return ReorderableListView.builder(
-                          itemCount: items.length,
-                          onReorder: onReorder,
-                          // 🔦 Подсветка перетаскиваемого элемента
-                          proxyDecorator:
-                              (
-                                Widget child,
-                                int index,
-                                Animation<double> anim,
-                              ) {
-                                final curved = CurvedAnimation(
-                                  parent: anim,
-                                  curve: Curves.easeOut,
-                                );
-                                return ScaleTransition(
-                                  scale: Tween(
-                                    begin: 1.0,
-                                    end: 1.03,
-                                  ).animate(curved),
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      boxShadow: const [
-                                        BoxShadow(
-                                          color: Color(0x13000000),
-                                          blurRadius: 12,
-                                          spreadRadius: 2,
-                                          offset: Offset(0, 6),
-                                        ),
-                                      ],
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .primary
-                                            .withValues(alpha: 0.6),
-                                        width: 2,
-                                      ),
-                                    ),
-                                    child: Material(
-                                      color: Colors.transparent,
-                                      child: child,
-                                    ),
-                                  ),
-                                );
-                              },
-                          itemBuilder: (context, index) {
-                            final it = items[index];
-                            return ReorderableDelayedDragStartListener(
-                              key: ValueKey('item_${it.id}'),
-                              index: index,
-                              child: buildRow(
-                                index,
-                              ), // внутри уже Dismissible + ItemTile
-                            );
-                          },
-                        );
-                      } else {
-                        return ListView.builder(
-                          itemCount: items.length,
-                          itemBuilder: (context, index) => buildRow(index),
-                        );
-                      }
-                    },
-                    loading: () =>
-                        const Center(child: CircularProgressIndicator()),
-                    error: (e, _) => Center(child: Text(e.toString())),
-                  ),
-                ),
-              ],
-            ),
-          ),
         ),
       ),
     );
@@ -672,7 +707,7 @@ class _FixedHeader extends StatelessWidget {
                       hintStyle: theme.textTheme.titleMedium?.copyWith(
                         color: cs.onSurface,
                       ),
-                      border: UnderlineInputBorder(),
+                      border: InputBorder.none, // стабильная высота
                       isDense: true,
                       contentPadding: const EdgeInsets.symmetric(vertical: 10),
                     ),
